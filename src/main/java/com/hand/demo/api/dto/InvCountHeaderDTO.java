@@ -31,4 +31,5 @@ public class InvCountHeaderDTO extends InvCountHeader {
     private String countTypeMeaning;
     private String countModeMeaning;
 
+
 }

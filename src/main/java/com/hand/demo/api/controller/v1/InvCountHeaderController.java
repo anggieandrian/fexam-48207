@@ -2,6 +2,7 @@ package com.hand.demo.api.controller.v1;
 
 import com.hand.demo.api.dto.InvCountHeaderDTO;
 import com.hand.demo.api.dto.InvCountInfoDTO;
+import com.hand.demo.api.dto.WorkFlowEventDTO;
 import io.choerodon.core.domain.Page;
 import io.choerodon.core.iam.ResourceLevel;
 import io.choerodon.mybatis.pagehelper.annotation.SortDefault;
@@ -20,6 +21,7 @@ import com.hand.demo.domain.entity.InvCountHeader;
 import com.hand.demo.domain.repository.InvCountHeaderRepository;
 import springfox.documentation.annotations.ApiIgnore;
 
+import javax.validation.Valid;
 import java.util.List;
 
 /**
@@ -49,7 +51,7 @@ public class InvCountHeaderController extends BaseController {
         return Results.success(list);
     }
 
-    @ApiOperation(value = "明细")
+    @ApiOperation(value = "Details")
     @Permission(level = ResourceLevel.ORGANIZATION)
     @GetMapping("/{countHeaderId}/detail")
     public ResponseEntity<InvCountHeader> detail(@PathVariable Long countHeaderId) {
@@ -86,7 +88,7 @@ public class InvCountHeaderController extends BaseController {
         return Results.success();
     }
 
-    @ApiOperation(value = "checkAndRemove")
+    @ApiOperation(value = "Check and Remove InvCount")
     @Permission(level = ResourceLevel.ORGANIZATION)
     @DeleteMapping("/checkAndRemove")
     public ResponseEntity<?> checkAndRemove(@PathVariable Long organizationId, @RequestBody List<InvCountHeaderDTO > invCountHeaders) {
@@ -102,8 +104,42 @@ public class InvCountHeaderController extends BaseController {
     public ResponseEntity<InvCountInfoDTO> orderExecution(@PathVariable Long organizationId, @RequestBody List<InvCountHeaderDTO> invCountHeaders) {
         validObject(invCountHeaders); // Validasi input wajib
         SecurityTokenHelper.validTokenIgnoreInsert(invCountHeaders);
-        InvCountInfoDTO executeResult = invCountHeaderService.orderExecution(invCountHeaders); // Panggil metode executeCheck dari service
-        return Results.success(executeResult); // Kembalikan hasil validasi
+        InvCountInfoDTO execute = invCountHeaderService.orderExecution(invCountHeaders); // Panggil metode executeCheck dari service
+        return Results.success(execute); // Kembalikan hasil validasi
     }
+
+
+    @ApiOperation(value = "Register External Interface")
+    @Permission(level = ResourceLevel.ORGANIZATION)
+    @PostMapping("/count-result-sync")
+    public ResponseEntity<InvCountHeaderDTO> countResultSync(@PathVariable Long organizationId, @RequestBody InvCountHeaderDTO invCountHeaders) {
+        validObject(invCountHeaders);// Validasi input wajib
+        SecurityTokenHelper.validTokenIgnoreInsert(invCountHeaders); // Validasi token keamanan
+        InvCountHeaderDTO resultSync = invCountHeaderService.countResultSync(invCountHeaders);// Panggil service untuk proses sinkronisasi hasil counting
+        return Results.success(resultSync);// Kembalikan hasil dalam format REST standar
+    }
+
+
+    @ApiOperation(value = "Submit counting results for approval")
+    @Permission(level = ResourceLevel.ORGANIZATION)
+    @PostMapping("/order-submit")
+    public ResponseEntity<InvCountInfoDTO> orderSubmit(@PathVariable Long organizationId, @RequestBody List<InvCountHeaderDTO> invCountHeaders) {
+        validObject(invCountHeaders); // Validasi input wajib
+        SecurityTokenHelper.validTokenIgnoreInsert(invCountHeaders);
+        InvCountInfoDTO orderSubmit = invCountHeaderService.orderSubmit(invCountHeaders); // Panggil metode executeCheck dari service
+        return Results.success(orderSubmit); // Kembalikan hasil validasi
+    }
+
+
+    @ApiOperation("Start workflow")
+    @PostMapping("/start-workflow")
+    @Permission(level = ResourceLevel.ORGANIZATION)
+    public ResponseEntity<InvCountHeaderDTO> approvalCallback(@PathVariable Long organizationId, @RequestBody WorkFlowEventDTO workFlowEventDTO){
+        return Results.success(invCountHeaderService.approvalCallback(organizationId, workFlowEventDTO));
+    }
+
+
 }
+
+
 

@@ -2,10 +2,12 @@ package com.hand.demo.app.service;
 
 import com.hand.demo.api.dto.InvCountHeaderDTO;
 import com.hand.demo.api.dto.InvCountInfoDTO;
+import com.hand.demo.api.dto.WorkFlowEventDTO;
 import io.choerodon.core.domain.Page;
 import io.choerodon.mybatis.pagehelper.domain.PageRequest;
 import com.hand.demo.domain.entity.InvCountHeader;
 import org.hzero.boot.interfaces.sdk.dto.ResponsePayloadDTO;
+import org.hzero.boot.workflow.dto.RunInstance;
 
 import java.util.List;
 
@@ -53,5 +55,18 @@ public interface InvCountHeaderService {
 
     ResponsePayloadDTO invokeInterface(String payload, String namespace, String serverCode,
                                        String interfaceCode, String accessToken);
+
+    InvCountHeaderDTO countResultSync(InvCountHeaderDTO countHeaderDTO);
+
+    InvCountInfoDTO orderSubmit(List<InvCountHeaderDTO> orderSubmitHeaders);
+
+    InvCountInfoDTO submitCheck(List<InvCountHeaderDTO> invCountHeaders);
+
+    List<InvCountHeaderDTO> submit(List<InvCountHeaderDTO> invCountHeaders);
+
+    InvCountHeaderDTO approvalCallback(Long organizationId, WorkFlowEventDTO workFlowEventDTO);
+
+
+//
 }
 
