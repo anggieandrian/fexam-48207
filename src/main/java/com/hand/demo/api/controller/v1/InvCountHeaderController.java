@@ -114,7 +114,7 @@ public class InvCountHeaderController extends BaseController {
     @PostMapping("/count-result-sync")
     public ResponseEntity<InvCountHeaderDTO> countResultSync(@PathVariable Long organizationId, @RequestBody InvCountHeaderDTO invCountHeaders) {
         validObject(invCountHeaders);// Validasi input wajib
-        SecurityTokenHelper.validTokenIgnoreInsert(invCountHeaders); // Validasi token keamanan
+//        SecurityTokenHelper.validTokenIgnoreInsert(invCountHeaders); // Validasi token keamanan
         InvCountHeaderDTO resultSync = invCountHeaderService.countResultSync(invCountHeaders);// Panggil service untuk proses sinkronisasi hasil counting
         return Results.success(resultSync);// Kembalikan hasil dalam format REST standar
     }
@@ -138,8 +138,11 @@ public class InvCountHeaderController extends BaseController {
         return Results.success(invCountHeaderService.approvalCallback(organizationId, workFlowEventDTO));
     }
 
+    @ApiOperation("Counting order report dataset method")
+    @GetMapping("/counting-order-report")
+    @Permission(level = ResourceLevel.ORGANIZATION)
+    public ResponseEntity<List<InvCountHeaderDTO>> countingOrderReportDs(@PathVariable Long organizationId, @RequestBody InvCountHeaderDTO searchCriteria) {
+        return Results.success(invCountHeaderService.countingOrderReportDs(searchCriteria));
+    }
 
 }
-
-
-

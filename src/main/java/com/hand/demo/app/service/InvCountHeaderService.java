@@ -66,6 +66,8 @@ public interface InvCountHeaderService {
 
     InvCountHeaderDTO approvalCallback(Long organizationId, WorkFlowEventDTO workFlowEventDTO);
 
+    List<InvCountHeaderDTO> countingOrderReportDs(InvCountHeaderDTO searchCriteria);
+
 
 //
 }

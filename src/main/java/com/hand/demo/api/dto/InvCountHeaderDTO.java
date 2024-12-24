@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import javax.persistence.Transient;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -16,11 +17,12 @@ public class InvCountHeaderDTO extends InvCountHeader {
     @ApiModelProperty(value = "Error Message")
     private String errorMsg;
     private String status;
-    private String counterList;
+    private List<UserDTO> counterList;
     private String supervisorList;
     private String snapshotMaterialList;
     private String snapshotBatchList;
     private Boolean isWmsWarehouse;
+    private Date createdDate;
 
 
    @Transient
@@ -30,6 +32,7 @@ public class InvCountHeaderDTO extends InvCountHeader {
     private String countDimensionMeaning;
     private String countTypeMeaning;
     private String countModeMeaning;
+
 
 
 }

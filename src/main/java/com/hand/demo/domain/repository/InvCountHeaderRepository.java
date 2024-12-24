@@ -1,9 +1,11 @@
 package com.hand.demo.domain.repository;
 
+import com.hand.demo.api.dto.InvCountHeaderDTO;
 import org.hzero.mybatis.base.BaseRepository;
 import com.hand.demo.domain.entity.InvCountHeader;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -36,4 +38,10 @@ public interface InvCountHeaderRepository extends BaseRepository<InvCountHeader>
     Optional<InvCountHeader> findById(Long id);
 
     void deleteById(Long id);
+
+    InvCountHeader selectCountNumber(String businessKey);
+
+    List<InvCountHeader> selectByMap(Map<String, Object> queryFilters);
+
+    List<InvCountHeader> selectByCriteria(InvCountHeaderDTO filterDTO);
 }

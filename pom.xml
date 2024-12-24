@@ -117,6 +117,11 @@
             <artifactId>hzero-boot-interface</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>org.hzero.boot</groupId>
+            <artifactId>hzero-boot-workflow</artifactId>
+            <version>1.10.1.RELEASE</version>
+        </dependency>
     </dependencies>
 
     <repositories>
