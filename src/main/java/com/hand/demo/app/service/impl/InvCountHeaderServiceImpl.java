@@ -23,8 +23,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.hand.demo.app.service.InvCountHeaderService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -84,144 +87,220 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
      */
     @Override
     public InvCountInfoDTO orderSave(List<InvCountHeaderDTO> orderSaveHeaders) {
-        // validasi data menggunakan manualsavecheck
-        InvCountInfoDTO validationResult = manualSaveCheck(orderSaveHeaders);
-        // simpan data hanya bila validasi berhasil
-        if (validationResult.getSuccessList() != null && !validationResult.getSuccessList().isEmpty()) {
+        InvCountInfoDTO validationResult = manualSaveCheck(orderSaveHeaders); // validasi data menggunakan manualsavecheck
+        // Todo HARUSNYA UBAH KE ERROR
+        // done
+        if (CollectionUtils.isEmpty(validationResult.getErrorList())) {// simpan data hanya bila validasi berhasil
             this.manualSave(validationResult.getSuccessList());
         }
         return validationResult;
     }
 
-    /**
-     * Melakukan validasi pada header penghitungan sebelum disimpan,
-     * memeriksa status dokumen dan pembuat di antara batasan lainnya.
-     */
     @Override
     public InvCountInfoDTO manualSaveCheck(List<InvCountHeaderDTO> invCountHeaders) {
-        // Inisialisasi objek hasil untuk menampung daftar sukses dan error
+        // membuat objek hasil u/ menyipan data error / berhasil
         InvCountInfoDTO resultManualSave = new InvCountInfoDTO();
         List<InvCountHeaderDTO> errorList = new ArrayList<>();
         List<InvCountHeaderDTO> successList = new ArrayList<>();
 
-        // Mendapatkan ID pengguna saat ini dari context keamanan
-        Long userId = DetailsHelper.getUserDetails().getUserId();
+//        InvCountHeader existingHeader = invCountHeaderRepository.selectByPrimary(invCountHeaders.getCountHeaderId());
 
-        // Iterasi setiap header yang akan divalidasi
+        // Mendapatkan ID pengguna dan tenant saat ini
+        Long userId = DetailsHelper.getUserDetails().getUserId(); // Untuk validasi pembuat dokumen
+        Long tenantId = DetailsHelper.getUserDetails().getTenantId(); // Untuk validasi tenant
+
         for (InvCountHeaderDTO header : invCountHeaders) {
-            StringBuilder errorMessages = new StringBuilder();
+            StringBuilder errorMessages = new StringBuilder(); // Tempat menyimpan pesan error untuk setiap header
 
-            // Jika header adalah dokumen baru (tidak memiliki ID), langsung tambahkan ke daftar sukses
-            if (header.getCountHeaderId() == null) {
-                successList.add(header); // Header baru, langsung dianggap valid
-                continue; // Lompat ke iterasi berikutnya
+            // Validasi tenantId
+            if (header.getTenantId() == null) {
+                header.setTenantId(tenantId); // Jika kosong, isi dengan tenant ID saat ini
+            } else if (!tenantId.equals(header.getTenantId())) {
+                errorMessages.append("Invalid Tenant ID. "); // Tambahkan pesan error jika tenant tidak cocok
             }
 
-            // Validasi status dokumen
+// Todo nanti di hapus karna datanya sudaha da di bwh dan tidak perlu ada karna untuk di save ||DONE||
+
+            // TOdo tambahkan untuk sat insert list berhasil baru lanjut ke tahap berikutnya
+            // Validasi countStatu
             String status = header.getCountStatus();
             if (status == null || (!status.equalsIgnoreCase("DRAFT")
-                    && !status.equalsIgnoreCase("IN COUNTING")
-                    && !status.equalsIgnoreCase("REJECTED")
+                    && !status.equalsIgnoreCase("INCOUNTING")
+                    && !status.equalsIgnoreCase("PROCESSING")
                     && !status.equalsIgnoreCase("WITHDRAWN"))) {
-                // Jika status tidak valid, tambahkan pesan error
-                errorMessages.append("Only DRAFT, IN COUNTING, REJECTED, or WITHDRAWN statuses are allowed. ");
+                errorMessages.append("Only DRAFT,INCOUNTING, PROCESSING, or WITHDRAWN statuses are allowed. ");
             }
 
-            // Validasi pencipta dokumen untuk status DRAFT
-            if ("DRAFT".equalsIgnoreCase(status) && !userId.equals(header.getCreatedBy())) {
-                errorMessages.append("Documents in DRAFT status can only be modified by the creator. ");
-            }
-
-            // Validasi spesifik berdasarkan status dokumen
+            // Validasi khusus untuk status DRAFT
+            // Validasi untuk status DRAFT
             if ("DRAFT".equalsIgnoreCase(status)) {
-                // Validasi tambahan untuk dokumen berstatus DRAFT
                 validateDraftFields(header, errorMessages);
             } else if ("IN COUNTING".equalsIgnoreCase(status)) {
-                // Validasi untuk dokumen berstatus IN COUNTING
                 validateInCountingFields(header, errorMessages);
             } else if ("REJECTED".equalsIgnoreCase(status) || "WITHDRAWN".equalsIgnoreCase(status)) {
-                // Validasi untuk dokumen berstatus REJECTED atau WITHDRAWN
                 validateRejectedOrWithdrawnFields(header, errorMessages);
             }
 
-            // Jika ada pesan error yang ditemukan, tambahkan header ke daftar error
+            // Tambahkan ke daftar sukses atau error
             if (errorMessages.length() > 0) {
-                header.setErrorMsg(errorMessages.toString());
-                errorList.add(header);
+                header.setErrorMsg(errorMessages.toString()); // Tambahkan pesan error ke header
+                errorList.add(header); // Masukkan ke daftar error
             } else {
-                // Jika tidak ada error, tambahkan header ke daftar sukses
-                successList.add(header);
+                successList.add(header); // Masukkan ke daftar sukses
             }
         }
 
-        // Set hasil validasi ke objek hasil
-        resultManualSave.setErrorList(errorList);
-        resultManualSave.setSuccessList(successList);
-
-        // Kembalikan objek hasil
-        return resultManualSave;
+        resultManualSave.setErrorList(errorList); // Simpan daftar error
+        resultManualSave.setSuccessList(successList); // Simpan daftar sukses
+        return resultManualSave; // Kembalikan hasil validasi
     }
 
+
+// todo data sudah di sesuikan dengan soalnya
     @Override
     public List<InvCountHeaderDTO> manualSave(List<InvCountHeaderDTO> invCountHeaders) {
-        // Ambil tenant ID dan user ID untuk set data baru
-        Long tenantId = DetailsHelper.getUserDetails().getTenantId();
-        Long userId = DetailsHelper.getUserDetails().getUserId();
+        Long tenantId = DetailsHelper.getUserDetails().getTenantId(); // tenant id sekarang
+        Long userId = DetailsHelper.getUserDetails().getUserId(); // user id sekarang
 
-        // Iterasi header yang ingin disimpan
-        for (InvCountHeaderDTO headerManualSave : invCountHeaders) {
-            if (headerManualSave.getCountHeaderId() == null) {
-                // Jika header baru, generate nomor dokumen dan set atribut default
-                headerManualSave.setCountNumber(codeRuleBuilder.generateCode("INV.COUNTING07.COUNT_NUMBER", new HashMap<>()));
-                headerManualSave.setTenantId(tenantId);
-                headerManualSave.setCountStatus("DRAFT");
-                headerManualSave.setCreatedBy(userId);
-                headerManualSave.setLastUpdatedBy(userId);
-                invCountHeaderRepository.insertSelective(headerManualSave); // Simpan dokumen baru
-            } else {
-                // Jika header lama, lakukan validasi dan update
-                InvCountHeader existingHeader = invCountHeaderRepository.selectByPrimary(headerManualSave.getCountHeaderId());
-                if (existingHeader == null) {
-                    throw new IllegalArgumentException("Header with ID " + headerManualSave.getCountHeaderId() + " does not exist.");
+        List<InvCountHeader> insertList = invCountHeaders.stream().filter(headerDTO -> headerDTO.getCountHeaderId() == null).collect(Collectors.toList());
+        List<InvCountHeader> updateList = invCountHeaders.stream().filter(headerDTO -> headerDTO.getCountHeaderId() != null).collect(Collectors.toList());
+
+        insertList.forEach(headerDTO -> {
+            Map<String,String > args = new HashMap<>();
+            args.put("customSegment", headerDTO.getTenantId().toString());
+            String codegenenerate = codeRuleBuilder.generateCode("codename",args);
+            headerDTO.setCountNumber(codegenenerate);
+            headerDTO.setCountStatus("DRAFT");
+            headerDTO.setDelFlag(0);
+        });
+        if(!CollectionUtils.isEmpty(updateList)){
+            updateList.forEach(headerDTO -> {
+                InvCountHeader existingHeader = invCountHeaderRepository.selectByPrimary(headerDTO.getCountHeaderId());
+                if (existingHeader == null){
+                   throw new IllegalStateException("Header wiht ID" + headerDTO.getCountHeaderId() + "does not exist." );
+                }
+                 // validasi status dan perbarui hanya field yang diizikan
+                String currentStatus = existingHeader.getCountStatus();
+                if("DRAFT".equalsIgnoreCase(currentStatus)) {
+                    headerDTO.setCompanyId(headerDTO.getCompanyId() != null ? headerDTO.getCompanyId() : existingHeader.getCompanyId());
+                    headerDTO.setDepartmentId(headerDTO.getDepartmentId() != null ? headerDTO.getDepartmentId() : existingHeader.getDepartmentId());
+                    headerDTO.setWarehouseId(headerDTO.getWarehouseId() != null ? headerDTO.getWarehouseId() : existingHeader.getWarehouseId());
+                    headerDTO.setCountDimension(headerDTO.getCountDimension() != null ? headerDTO.getCountDimension() : existingHeader.getCountDimension());
+                    headerDTO.setCountType(headerDTO.getCountType() != null ? headerDTO.getCountType() : existingHeader.getCountType());
+                    headerDTO.setCountMode(headerDTO.getCountMode() != null ? headerDTO.getCountMode() : existingHeader.getCountMode());
+                    headerDTO.setCountTimeStr(headerDTO.getCountTimeStr() != null ? headerDTO.getCountTimeStr() : existingHeader.getCountTimeStr());
+                    headerDTO.setCounterIds(headerDTO.getCounterIds() != null ? headerDTO.getCounterIds() : existingHeader.getCounterIds());
+                    headerDTO.setSupervisorIds(headerDTO.getSupervisorIds() != null ? headerDTO.getSupervisorIds() : existingHeader.getSupervisorIds());
+                    headerDTO.setSnapshotMaterialIds(headerDTO.getSnapshotMaterialIds() != null ? headerDTO.getSnapshotMaterialIds() : existingHeader.getSnapshotMaterialIds());
+                    headerDTO.setSnapshotBatchIds(headerDTO.getSnapshotBatchIds() != null ? headerDTO.getSnapshotBatchIds() : existingHeader.getSnapshotBatchIds());
                 }
 
-                // Salin atribut penting dari header lama
-                headerManualSave.setObjectVersionNumber(existingHeader.getObjectVersionNumber());
-                headerManualSave.set_token(existingHeader.get_token());
-                headerManualSave.setLastUpdatedBy(userId);
-                invCountHeaderRepository.updateByPrimaryKeySelective(headerManualSave); // Update dokumen lama
-            }
+                // Field yang dapat diperbarui pada status tertentu
+                if ("PROCESSING".equalsIgnoreCase(currentStatus)) {
+                    headerDTO.setRemark(headerDTO.getRemark() != null ? headerDTO.getRemark() : existingHeader.getRemark());
+                    headerDTO.setReason(headerDTO.getReason() != null ? headerDTO.getReason() : existingHeader.getReason());
+                } else if ("REJECTED".equalsIgnoreCase(currentStatus)) {
+                    headerDTO.setReason(headerDTO.getReason() != null ? headerDTO.getReason() : existingHeader.getReason());
+                }
 
-            // Simpan atau update detail line terkait
-            saveLines(headerManualSave);
+                // Salin metadata dari header lama
+                headerDTO.setObjectVersionNumber(existingHeader.getObjectVersionNumber());
+                headerDTO.set_token(existingHeader.get_token());
+                headerDTO.setLastUpdatedBy(userId); // Set pengguna terakhir yang memperbarui
+            });
+
+            // Simpan semua header yang diperbarui ke database
+            invCountHeaderRepository.batchUpdateOptional(updateList);
         }
 
-        return invCountHeaders; // Kembalikan daftar header yang disimpan
+        // Simpan semua header baru ke database
+        if (!CollectionUtils.isEmpty(insertList)) {
+            invCountHeaderRepository.batchInsert(insertList);
+        }
+
+        // Proses line terkait
+        invCountHeaders.forEach(this::saveLines);
+
+        // Gabungkan semua header yang berhasil disimpan
+        List<InvCountHeader> result = new ArrayList<>();
+        result.addAll(insertList);
+        result.addAll(updateList);
+        return invCountHeaders; // Kembalikan daftar dokumen yang disimpan
     }
 
 
     private void saveLines(InvCountHeaderDTO header) {
-        // Ambil detail line dari header
-        List<InvCountLineDTO> linesSave = header.getInvCountLineDTOList();
+        List<InvCountLineDTO> linesSave = header.getInvCountLineDTOList(); // Ambil daftar line terkait
         if (linesSave == null || linesSave.isEmpty()) {
-            return; // Jika tidak ada line, keluar dari metode
+            return; // Jika tidak ada line, keluar dari fungsi
         }
 
-        // Iterasi setiap line
+        Long tenantId = DetailsHelper.getUserDetails().getTenantId(); // Tenant ID saat ini
+        Long currentUserId = DetailsHelper.getUserDetails().getUserId(); // User ID saat ini
+
+        int lineNumber = 1; // Nomor baris awal
         for (InvCountLineDTO line : linesSave) {
-            line.setCountHeaderId(header.getCountHeaderId()); // Set header ID pada line
+            line.setTenantId(tenantId); // Set tenant ID
+            line.setCountHeaderId(header.getCountHeaderId()); // Asosiasikan dengan header
+            line.setLineNumber(lineNumber++); // Nomor baris increment
+
             if (line.getCountLineId() == null) {
-                // Jika line baru, simpan ke database
-                invCountLineRepository.insertSelective(line);
+                // Line baru
+                InvStock stock = invStockRepository.selectOne(new InvStock() {{
+                    setTenantId(tenantId);
+                    setWarehouseId(header.getWarehouseId());
+                    setMaterialId(line.getMaterialId());
+                    setBatchId(line.getBatchId());
+                }});
+                line.setSnapshotUnitQty(stock != null ? stock.getAvailableQuantity() : BigDecimal.ZERO); // Ambil stok awal
+                line.setCounterIds(header.getCounterIds()); // Inisialisasi counter IDs
+                invCountLineRepository.insertSelective(line); // Simpan line baru
             } else {
-                // Jika line lama, validasi keberadaan data dan update
+                // Update line lama
                 InvCountLine existingLine = invCountLineRepository.selectByPrimary(line.getCountLineId());
                 if (existingLine == null) {
                     throw new IllegalArgumentException("Line with ID " + line.getCountLineId() + " does not exist.");
                 }
-                invCountLineRepository.updateByPrimaryKeySelective(line);
+
+                if ("INCOUNTING".equalsIgnoreCase(header.getCountStatus())) {
+                    // Perbarui `unitQty` jika counter diizinkan
+                    if (line.getUnitQty() != null && !line.getUnitQty().equals(existingLine.getUnitQty())) {
+                        if (!isCounterAuthorized(existingLine.getCounterIds(), currentUserId)) { // pindahkan masukan ke validasi
+                            throw new IllegalArgumentException("Only authorized counters can modify unitQty.");
+                        }
+                        existingLine.setUnitQty(line.getUnitQty()); // Update jumlah unit
+                        existingLine.setCounterIds(String.valueOf(currentUserId)); // Set counter ID
+                    }
+
+                    existingLine.setUnitDiffQty(calculateUnitDiffQty(existingLine.getSnapshotUnitQty(), line.getUnitQty())); // Hitung selisih
+                }
+
+                invCountLineRepository.updateByPrimaryKeySelective(existingLine); // Simpan perubahan line
             }
         }
+    }
+
+    private BigDecimal calculateUnitDiffQty(BigDecimal snapshotUnitQty, BigDecimal unitQty) {
+        if (snapshotUnitQty == null || unitQty == null) {
+            return BigDecimal.ZERO; // Jika salah satu nilai null, hasil perbedaan diatur menjadi 0
+        }
+        return unitQty.subtract(snapshotUnitQty); // Mengembalikan selisih antara jumlah yang dihitung (unitQty) dan stok awal (snapshotUnitQty)
+    }
+
+    private boolean isCounterAuthorized(String counterIds, Long currentUserId) {
+        if (counterIds == null || currentUserId == null) {
+            return false; // Jika daftar counterIds atau currentUserId kosong, kembalikan false
+        }
+        List<Long> counters = Arrays.stream(counterIds.split(",")) // Pecah daftar counterIds yang dipisahkan koma
+                .map(String::trim) // Hilangkan spasi berlebih
+                .map(Long::valueOf) // Konversi setiap elemen menjadi Long
+                .collect(Collectors.toList()); // Kumpulkan hasil ke dalam list
+        return counters.contains(currentUserId); // Periksa apakah currentUserId ada dalam daftar counter
+    }
+
+    private String generateCountNumber(Long tenantId) {
+        return String.format("INV-Counting-%d-%s", tenantId, LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")));
+        // buat Format: INV-Counting-{tenantId}-{yyyyMMdd}
     }
 
     private boolean isCountNumberModified(InvCountHeaderDTO headerCoutNumber) {
@@ -267,15 +346,9 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
 
 
     private void validateInCountingFields(InvCountHeaderDTO headerValidateCount, StringBuilder errorMessages) {
-        // Periksa apakah remark kosong atau null
-        if (headerValidateCount.getRemark() == null || headerValidateCount.getRemark().isEmpty()) {
-            errorMessages.append("Remark is required for IN COUNTING status. ");
-            // Tambahkan pesan error jika remark tidak diisi
-        }
-
         // Periksa apakah reason kosong atau null
         if (headerValidateCount.getReason() == null || headerValidateCount.getReason().isEmpty()) {
-            errorMessages.append("Reason is required for IN COUNTING status. ");
+            errorMessages.append("Reason is required for PROCESSING  status. ");
             // Tambahkan pesan error jika reason tidak diisi
         }
     }
@@ -284,13 +357,13 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
     private void validateRejectedOrWithdrawnFields(InvCountHeaderDTO headerValidateReject, StringBuilder errorMessages) {
         // Periksa apakah countNumber diubah
         if (isCountNumberModified(headerValidateReject)) {
-            errorMessages.append("Count number updates are not allowed in REJECTED/WITHDRAWN status. ");
+            errorMessages.append("Count number updates are not allowed in WITHDRAWN status. ");
             // Tambahkan pesan error jika countNumber diubah
         }
 
         // Periksa apakah reason null
         if (headerValidateReject.getReason() == null) {
-            errorMessages.append("Reason is required for REJECTED/WITHDRAWN status. ");
+            errorMessages.append("Reason is required for WITHDRAWN status. ");
             // Tambahkan pesan error jika reason tidak diisi
         }
     }
@@ -494,8 +567,6 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
     }
 
 
-
-
     @Override
     public InvCountInfoDTO executeCheck(List<InvCountHeaderDTO> invCountHeaders) {
         InvCountInfoDTO executeCheckResult = new InvCountInfoDTO();
@@ -599,7 +670,7 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
 
         for (InvCountHeaderDTO headerExecute : invCountHeaders) {
             // 1. Update the counting order status to "In counting"
-            headerExecute.setCountStatus("IN COUNTING");
+            headerExecute.setCountStatus("PROCESSING");
             headerExecute.setLastUpdatedBy(userId);
             invCountHeaderRepository.updateByPrimaryKeySelective(headerExecute);
 
@@ -910,11 +981,9 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
 
             // 1. Check document status
             String status = existingHeader.getCountStatus();
-            if (!"IN COUNTING".equalsIgnoreCase(status) &&
-                    !"PROCESSING".equalsIgnoreCase(status) &&
-                    !"REJECTED".equalsIgnoreCase(status) &&
+            if (!"PROCESSING".equalsIgnoreCase(status) &&
                     !"WITHDRAWN".equalsIgnoreCase(status)) {
-                errorMessages.append("Operation is only allowed for documents in IN COUNTING, PROCESSING, REJECTED, or WITHDRAWN status. ");
+                errorMessages.append("Operation is only allowed for documents in PROCESSING, or WITHDRAWN status. ");
             }
 
             // 2. Current login user validation
@@ -1021,8 +1090,8 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
         }
 
         String status = existingHeader.getCountStatus();
-        if (!Arrays.asList("IN COUNTING", "PROCESSING", "REJECTED", "WITHDRAWN").contains(status.toUpperCase())) {
-            throw new IllegalStateException("Operation is only allowed for documents in IN COUNTING, PROCESSING, REJECTED, or WITHDRAWN status.");
+        if (!Arrays.asList( "PROCESSING", "WITHDRAWN").contains(status.toUpperCase())) {
+            throw new IllegalStateException("Operation is only allowed for documents in PROCESSING, or WITHDRAWN status.");
         }
 
         header.setTenantId(existingHeader.getTenantId());

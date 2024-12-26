@@ -160,12 +160,14 @@ public class InvCountHeader extends AuditDomain {
     private String supervisorIds;
 
     @ApiModelProperty(value = "", required = true)
-    @NotNull
+    @NotNull(groups = validateCreate.class)
     private Long tenantId;
 
     private Long warehouseId;
 
     private Long workflowId;
+
+    public interface validateCreate {}
 
 }
 

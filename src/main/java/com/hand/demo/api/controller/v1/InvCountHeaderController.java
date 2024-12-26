@@ -84,7 +84,8 @@ public class InvCountHeaderController extends BaseController {
     @Permission(level = ResourceLevel.ORGANIZATION)
     @PostMapping ("/order-save")
     public ResponseEntity<InvCountInfoDTO> orderSave(@PathVariable Long organizationId, @RequestBody List<InvCountHeaderDTO> orderSaveHeaders) {
-        validObject(orderSaveHeaders);
+        SecurityTokenHelper.validTokenIgnoreInsert(orderSaveHeaders);
+        validList(orderSaveHeaders, InvCountHeader.validateCreate.class); // seharusnya pakai ini hubungkana tabel header dengan line agar bisa terbaca untuk keduanya
         orderSaveHeaders.forEach(item -> item.setTenantId(organizationId));
         return Results.success(invCountHeaderService.orderSave(orderSaveHeaders));
     }
@@ -121,7 +122,7 @@ public class InvCountHeaderController extends BaseController {
     @Permission(level = ResourceLevel.ORGANIZATION)
     @PostMapping("/order-execution")
     public ResponseEntity<InvCountInfoDTO> orderExecution(@PathVariable Long organizationId, @RequestBody List<InvCountHeaderDTO> invCountHeaders) {
-        validObject(invCountHeaders); // Validasi input wajib
+        validList(invCountHeaders); // Validasi input wajib
         SecurityTokenHelper.validTokenIgnoreInsert(invCountHeaders);
         InvCountInfoDTO execute = invCountHeaderService.orderExecution(invCountHeaders); // Panggil metode executeCheck dari service
         return Results.success(execute); // Kembalikan hasil validasi

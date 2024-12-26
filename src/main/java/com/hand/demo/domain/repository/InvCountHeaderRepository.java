@@ -44,4 +44,6 @@ public interface InvCountHeaderRepository extends BaseRepository<InvCountHeader>
     List<InvCountHeader> selectByMap(Map<String, Object> queryFilters);
 
     List<InvCountHeader> selectByCriteria(InvCountHeaderDTO filterDTO);
+
+
 }
