@@ -41,16 +41,21 @@ public class InvCountHeaderController extends BaseController {
     @Autowired
     private InvCountHeaderService invCountHeaderService;
 
+
+    /**
+     * Mendapatkan daftar header penghitungan dengan kemampuan paging dan sorting.
+     */
     @ApiOperation(value = "列表")
     @Permission(level = ResourceLevel.ORGANIZATION)
     @GetMapping
-    public ResponseEntity<Page<InvCountHeader>> list(InvCountHeader invCountHeader, @PathVariable Long organizationId,
-                                                     @ApiIgnore @SortDefault(value = InvCountHeader.FIELD_COUNT_HEADER_ID,
-                                                             direction = Sort.Direction.DESC) PageRequest pageRequest) {
+    public ResponseEntity<Page<InvCountHeader>> list(InvCountHeader invCountHeader, @PathVariable Long organizationId, @ApiIgnore @SortDefault(value = InvCountHeader.FIELD_COUNT_HEADER_ID, direction = Sort.Direction.DESC) PageRequest pageRequest) {
         Page<InvCountHeader> list = invCountHeaderService.selectList(pageRequest, invCountHeader);
         return Results.success(list);
     }
 
+    /**
+     * Mendapatkan detail spesifik header penghitungan berdasarkan ID.
+     */
     @ApiOperation(value = "Details")
     @Permission(level = ResourceLevel.ORGANIZATION)
     @GetMapping("/{countHeaderId}/detail")
@@ -59,17 +64,22 @@ public class InvCountHeaderController extends BaseController {
         return Results.success(invCountHeader);
     }
 
+    /**
+     * Membuat atau memperbarui header penghitungan dalam batch.
+     */
     @ApiOperation(value = "创建或更新")
     @Permission(level = ResourceLevel.ORGANIZATION)
     @PostMapping
-    public ResponseEntity<List<InvCountHeader>> save(@PathVariable Long organizationId, @RequestBody List<InvCountHeader> invCountHeaders) {
-        validObject(invCountHeaders);
+    public ResponseEntity<List<InvCountHeader>> save(@PathVariable Long organizationId, @RequestBody List<InvCountHeader> invCountHeaders) {validObject(invCountHeaders);
         SecurityTokenHelper.validTokenIgnoreInsert(invCountHeaders);
         invCountHeaders.forEach(item -> item.setTenantId(organizationId));
         invCountHeaderService.saveData(invCountHeaders);
         return Results.success(invCountHeaders);
     }
 
+    /**
+     * Menyimpan urutan penghitungan dengan validasi dan logika bisnis yang diperlukan.
+     */
     @ApiOperation(value = "Save Counting Order")
     @Permission(level = ResourceLevel.ORGANIZATION)
     @PostMapping ("/order-save")
@@ -79,6 +89,9 @@ public class InvCountHeaderController extends BaseController {
         return Results.success(invCountHeaderService.orderSave(orderSaveHeaders));
     }
 
+    /**
+     * Menghapus header penghitungan berdasarkan token keamanan.
+     */
     @ApiOperation(value = "删除")
     @Permission(level = ResourceLevel.ORGANIZATION)
     @DeleteMapping
@@ -88,6 +101,9 @@ public class InvCountHeaderController extends BaseController {
         return Results.success();
     }
 
+    /**
+     * Memeriksa kondisi tertentu sebelum menghapus header penghitungan.
+     */
     @ApiOperation(value = "Check and Remove InvCount")
     @Permission(level = ResourceLevel.ORGANIZATION)
     @DeleteMapping("/checkAndRemove")
@@ -98,6 +114,9 @@ public class InvCountHeaderController extends BaseController {
         return Results.success();
     }
 
+    /**
+     * Melakukan verifikasi dan eksekusi atas urutan penghitungan.
+     */
     @ApiOperation(value = "Execute Counting Order Verification")
     @Permission(level = ResourceLevel.ORGANIZATION)
     @PostMapping("/order-execution")
@@ -108,18 +127,21 @@ public class InvCountHeaderController extends BaseController {
         return Results.success(execute); // Kembalikan hasil validasi
     }
 
-
+    /**
+     * Menyinkronkan hasil penghitungan dengan sistem atau database eksternal.
+     */
     @ApiOperation(value = "Register External Interface")
     @Permission(level = ResourceLevel.ORGANIZATION)
     @PostMapping("/count-result-sync")
     public ResponseEntity<InvCountHeaderDTO> countResultSync(@PathVariable Long organizationId, @RequestBody InvCountHeaderDTO invCountHeaders) {
         validObject(invCountHeaders);// Validasi input wajib
-//        SecurityTokenHelper.validTokenIgnoreInsert(invCountHeaders); // Validasi token keamanan
         InvCountHeaderDTO resultSync = invCountHeaderService.countResultSync(invCountHeaders);// Panggil service untuk proses sinkronisasi hasil counting
         return Results.success(resultSync);// Kembalikan hasil dalam format REST standar
     }
 
-
+    /**
+     * Mengajukan hasil penghitungan untuk persetujuan.
+     */
     @ApiOperation(value = "Submit counting results for approval")
     @Permission(level = ResourceLevel.ORGANIZATION)
     @PostMapping("/order-submit")
@@ -130,7 +152,9 @@ public class InvCountHeaderController extends BaseController {
         return Results.success(orderSubmit); // Kembalikan hasil validasi
     }
 
-
+    /**
+     * Memulai atau menanggapi callback dari proses workflow.
+     */
     @ApiOperation("Start workflow")
     @PostMapping("/start-workflow")
     @Permission(level = ResourceLevel.ORGANIZATION)
@@ -138,6 +162,9 @@ public class InvCountHeaderController extends BaseController {
         return Results.success(invCountHeaderService.approvalCallback(organizationId, workFlowEventDTO));
     }
 
+    /**
+     * Mengambil laporan dataset perintah penghitungan berdasarkan kriteria pencarian.
+     */
     @ApiOperation("Counting order report dataset method")
     @GetMapping("/counting-order-report")
     @Permission(level = ResourceLevel.ORGANIZATION)

@@ -136,9 +136,7 @@ public class InvCountLine extends AuditDomain {
     private Long warehouseId;
 
     private String materialCode;
+
     private String reason;
 
-
-
 }
-

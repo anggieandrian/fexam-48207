@@ -1,7 +1,6 @@
 package com.hand.demo.app.service.impl;
 
 import com.hand.demo.api.dto.*;
-import com.hand.demo.app.service.InvCountExtraService;
 import com.hand.demo.domain.entity.*;
 import com.hand.demo.domain.repository.*;
 import io.choerodon.core.domain.Page;
@@ -51,8 +50,6 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
     @Autowired
     private IamDepartmentRepository iamDepartmentRepository;
     @Autowired
-    private InvCountExtraService invCountExtraService;
-    @Autowired
     private InterfaceInvokeSdk invokeSdk;
     @Autowired
     private CodeRuleBuilder codeRuleBuilder;
@@ -62,11 +59,18 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
     private WorkflowClient workflowClient;
 
 
+    /**
+     * Mengambil daftar header penghitungan berdasarkan kriteria yang diberikan,
+     * mendukung pagination dan sorting.
+     */
     @Override
     public Page<InvCountHeader> selectList(PageRequest pageRequest, InvCountHeader invCountHeader) {
         return PageHelper.doPageAndSort(pageRequest, () -> invCountHeaderRepository.selectList(invCountHeader));
     }
 
+    /**
+     * Menyimpan daftar header penghitungan, membedakan antara insert dan update.
+     */
     @Override
     public void saveData(List<InvCountHeader> invCountHeaders) {
         List<InvCountHeader> inserSave = invCountHeaders.stream().filter(line -> line.getCountHeaderId() == null).collect(Collectors.toList());
@@ -75,6 +79,9 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
         invCountHeaderRepository.batchUpdateByPrimaryKeySelective(updateSave);
     }
 
+    /**
+     * Memvalidasi dan menyimpan header penghitungan. Hanya header yang lolos validasi yang disimpan.
+     */
     @Override
     public InvCountInfoDTO orderSave(List<InvCountHeaderDTO> orderSaveHeaders) {
         // validasi data menggunakan manualsavecheck
@@ -86,106 +93,128 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
         return validationResult;
     }
 
-    // ----------------------------------------------------------------
-@Override
-public InvCountInfoDTO manualSaveCheck(List<InvCountHeaderDTO> invCountHeaders) {
-    InvCountInfoDTO resultManualSave = new InvCountInfoDTO();
-    List<InvCountHeaderDTO> errorList = new ArrayList<>();
-    List<InvCountHeaderDTO> successList = new ArrayList<>();
+    /**
+     * Melakukan validasi pada header penghitungan sebelum disimpan,
+     * memeriksa status dokumen dan pembuat di antara batasan lainnya.
+     */
+    @Override
+    public InvCountInfoDTO manualSaveCheck(List<InvCountHeaderDTO> invCountHeaders) {
+        // Inisialisasi objek hasil untuk menampung daftar sukses dan error
+        InvCountInfoDTO resultManualSave = new InvCountInfoDTO();
+        List<InvCountHeaderDTO> errorList = new ArrayList<>();
+        List<InvCountHeaderDTO> successList = new ArrayList<>();
 
-    Long userId = DetailsHelper.getUserDetails().getUserId();
+        // Mendapatkan ID pengguna saat ini dari context keamanan
+        Long userId = DetailsHelper.getUserDetails().getUserId();
 
-    for (InvCountHeaderDTO header : invCountHeaders) {
-        StringBuilder errorMessages = new StringBuilder();
+        // Iterasi setiap header yang akan divalidasi
+        for (InvCountHeaderDTO header : invCountHeaders) {
+            StringBuilder errorMessages = new StringBuilder();
 
-        if (header.getCountHeaderId() == null) {
-            successList.add(header); // Header baru, langsung dianggap valid
-            continue;
+            // Jika header adalah dokumen baru (tidak memiliki ID), langsung tambahkan ke daftar sukses
+            if (header.getCountHeaderId() == null) {
+                successList.add(header); // Header baru, langsung dianggap valid
+                continue; // Lompat ke iterasi berikutnya
+            }
+
+            // Validasi status dokumen
+            String status = header.getCountStatus();
+            if (status == null || (!status.equalsIgnoreCase("DRAFT")
+                    && !status.equalsIgnoreCase("IN COUNTING")
+                    && !status.equalsIgnoreCase("REJECTED")
+                    && !status.equalsIgnoreCase("WITHDRAWN"))) {
+                // Jika status tidak valid, tambahkan pesan error
+                errorMessages.append("Only DRAFT, IN COUNTING, REJECTED, or WITHDRAWN statuses are allowed. ");
+            }
+
+            // Validasi pencipta dokumen untuk status DRAFT
+            if ("DRAFT".equalsIgnoreCase(status) && !userId.equals(header.getCreatedBy())) {
+                errorMessages.append("Documents in DRAFT status can only be modified by the creator. ");
+            }
+
+            // Validasi spesifik berdasarkan status dokumen
+            if ("DRAFT".equalsIgnoreCase(status)) {
+                // Validasi tambahan untuk dokumen berstatus DRAFT
+                validateDraftFields(header, errorMessages);
+            } else if ("IN COUNTING".equalsIgnoreCase(status)) {
+                // Validasi untuk dokumen berstatus IN COUNTING
+                validateInCountingFields(header, errorMessages);
+            } else if ("REJECTED".equalsIgnoreCase(status) || "WITHDRAWN".equalsIgnoreCase(status)) {
+                // Validasi untuk dokumen berstatus REJECTED atau WITHDRAWN
+                validateRejectedOrWithdrawnFields(header, errorMessages);
+            }
+
+            // Jika ada pesan error yang ditemukan, tambahkan header ke daftar error
+            if (errorMessages.length() > 0) {
+                header.setErrorMsg(errorMessages.toString());
+                errorList.add(header);
+            } else {
+                // Jika tidak ada error, tambahkan header ke daftar sukses
+                successList.add(header);
+            }
         }
 
-        // Validasi status dokumen
-        String status = header.getCountStatus();
-        if (status == null || (!status.equalsIgnoreCase("DRAFT")
-                && !status.equalsIgnoreCase("IN COUNTING")
-                && !status.equalsIgnoreCase("REJECTED")
-                && !status.equalsIgnoreCase("WITHDRAWN"))) {
-            errorMessages.append("Only DRAFT, IN COUNTING, REJECTED, or WITHDRAWN statuses are allowed. ");
-        }
+        // Set hasil validasi ke objek hasil
+        resultManualSave.setErrorList(errorList);
+        resultManualSave.setSuccessList(successList);
 
-        // Validasi pencipta dokumen
-        if ("DRAFT".equalsIgnoreCase(status) && !userId.equals(header.getCreatedBy())) {
-            errorMessages.append("Documents in DRAFT status can only be modified by the creator. ");
-        }
-
-        // Validasi untuk status DRAFT
-        if ("DRAFT".equalsIgnoreCase(status)) {
-            validateDraftFields(header, errorMessages);
-        } else if ("IN COUNTING".equalsIgnoreCase(status)) {
-            validateInCountingFields(header, errorMessages);
-        } else if ("REJECTED".equalsIgnoreCase(status) || "WITHDRAWN".equalsIgnoreCase(status)) {
-            validateRejectedOrWithdrawnFields(header, errorMessages);
-        }
-
-        if (errorMessages.length() > 0) {
-            header.setErrorMsg(errorMessages.toString());
-            errorList.add(header);
-        } else {
-            successList.add(header);
-        }
+        // Kembalikan objek hasil
+        return resultManualSave;
     }
-
-    resultManualSave.setErrorList(errorList);
-    resultManualSave.setSuccessList(successList);
-    return resultManualSave;
-}
-
 
     @Override
     public List<InvCountHeaderDTO> manualSave(List<InvCountHeaderDTO> invCountHeaders) {
+        // Ambil tenant ID dan user ID untuk set data baru
         Long tenantId = DetailsHelper.getUserDetails().getTenantId();
         Long userId = DetailsHelper.getUserDetails().getUserId();
 
+        // Iterasi header yang ingin disimpan
         for (InvCountHeaderDTO headerManualSave : invCountHeaders) {
             if (headerManualSave.getCountHeaderId() == null) {
-                // Insert baru
+                // Jika header baru, generate nomor dokumen dan set atribut default
                 headerManualSave.setCountNumber(codeRuleBuilder.generateCode("INV.COUNTING07.COUNT_NUMBER", new HashMap<>()));
                 headerManualSave.setTenantId(tenantId);
                 headerManualSave.setCountStatus("DRAFT");
                 headerManualSave.setCreatedBy(userId);
                 headerManualSave.setLastUpdatedBy(userId);
-                invCountHeaderRepository.insertSelective(headerManualSave);
+                invCountHeaderRepository.insertSelective(headerManualSave); // Simpan dokumen baru
             } else {
-                // Update data
+                // Jika header lama, lakukan validasi dan update
                 InvCountHeader existingHeader = invCountHeaderRepository.selectByPrimary(headerManualSave.getCountHeaderId());
                 if (existingHeader == null) {
                     throw new IllegalArgumentException("Header with ID " + headerManualSave.getCountHeaderId() + " does not exist.");
                 }
 
-                // Salin versi terbaru untuk update
+                // Salin atribut penting dari header lama
                 headerManualSave.setObjectVersionNumber(existingHeader.getObjectVersionNumber());
                 headerManualSave.set_token(existingHeader.get_token());
                 headerManualSave.setLastUpdatedBy(userId);
-                invCountHeaderRepository.updateByPrimaryKeySelective(headerManualSave);
+                invCountHeaderRepository.updateByPrimaryKeySelective(headerManualSave); // Update dokumen lama
             }
 
-            // Simpan line terkait
+            // Simpan atau update detail line terkait
             saveLines(headerManualSave);
         }
 
-        return invCountHeaders;
+        return invCountHeaders; // Kembalikan daftar header yang disimpan
     }
 
+
     private void saveLines(InvCountHeaderDTO header) {
+        // Ambil detail line dari header
         List<InvCountLineDTO> linesSave = header.getInvCountLineDTOList();
         if (linesSave == null || linesSave.isEmpty()) {
-            return;
+            return; // Jika tidak ada line, keluar dari metode
         }
 
+        // Iterasi setiap line
         for (InvCountLineDTO line : linesSave) {
-            line.setCountHeaderId(header.getCountHeaderId());
+            line.setCountHeaderId(header.getCountHeaderId()); // Set header ID pada line
             if (line.getCountLineId() == null) {
+                // Jika line baru, simpan ke database
                 invCountLineRepository.insertSelective(line);
             } else {
+                // Jika line lama, validasi keberadaan data dan update
                 InvCountLine existingLine = invCountLineRepository.selectByPrimary(line.getCountLineId());
                 if (existingLine == null) {
                     throw new IllegalArgumentException("Line with ID " + line.getCountLineId() + " does not exist.");
@@ -195,108 +224,78 @@ public InvCountInfoDTO manualSaveCheck(List<InvCountHeaderDTO> invCountHeaders) 
         }
     }
 
-
     private boolean isCountNumberModified(InvCountHeaderDTO headerCoutNumber) {
+        // Jika countNumber atau countHeaderId null, langsung kembalikan false
         if (headerCoutNumber.getCountNumber() == null || headerCoutNumber.getCountHeaderId() == null) {
-            return false;
+            return false; // Tidak bisa memeriksa perubahan jika salah satu nilai tidak ada
         }
 
+        // Ambil header yang ada di database berdasarkan countHeaderId
         InvCountHeader existingHeader = invCountHeaderRepository.selectByPrimary(headerCoutNumber.getCountHeaderId());
+
+        // Periksa apakah header ada di database dan apakah countNumber berbeda
         return existingHeader != null && !headerCoutNumber.getCountNumber().equals(existingHeader.getCountNumber());
+        // Return true jika countNumber berbeda, false jika sama atau tidak ditemukan
     }
+
 
     private void validateDraftFields(InvCountHeaderDTO headerValidateDraf, StringBuilder errorMessages) {
+        // Periksa apakah companyId null
         if (headerValidateDraf.getCompanyId() == null) {
             errorMessages.append("Company ID is required for DRAFT status. ");
+            // Tambahkan pesan error jika companyId tidak diisi
         }
+
+        // Periksa apakah warehouseId null
         if (headerValidateDraf.getWarehouseId() == null) {
             errorMessages.append("Warehouse ID is required for DRAFT status. ");
+            // Tambahkan pesan error jika warehouseId tidak diisi
         }
+
+        // Periksa apakah counterIds null
         if (headerValidateDraf.getCounterIds() == null) {
             errorMessages.append("Counter IDs are required for DRAFT status. ");
+            // Tambahkan pesan error jika counterIds tidak diisi
         }
+
+        // Periksa apakah supervisorIds null
         if (headerValidateDraf.getSupervisorIds() == null) {
             errorMessages.append("Supervisor IDs are required for DRAFT status. ");
+            // Tambahkan pesan error jika supervisorIds tidak diisi
         }
     }
+
 
     private void validateInCountingFields(InvCountHeaderDTO headerValidateCount, StringBuilder errorMessages) {
+        // Periksa apakah remark kosong atau null
         if (headerValidateCount.getRemark() == null || headerValidateCount.getRemark().isEmpty()) {
             errorMessages.append("Remark is required for IN COUNTING status. ");
+            // Tambahkan pesan error jika remark tidak diisi
         }
+
+        // Periksa apakah reason kosong atau null
         if (headerValidateCount.getReason() == null || headerValidateCount.getReason().isEmpty()) {
             errorMessages.append("Reason is required for IN COUNTING status. ");
+            // Tambahkan pesan error jika reason tidak diisi
         }
     }
+
 
     private void validateRejectedOrWithdrawnFields(InvCountHeaderDTO headerValidateReject, StringBuilder errorMessages) {
+        // Periksa apakah countNumber diubah
         if (isCountNumberModified(headerValidateReject)) {
             errorMessages.append("Count number updates are not allowed in REJECTED/WITHDRAWN status. ");
+            // Tambahkan pesan error jika countNumber diubah
         }
+
+        // Periksa apakah reason null
         if (headerValidateReject.getReason() == null) {
             errorMessages.append("Reason is required for REJECTED/WITHDRAWN status. ");
+            // Tambahkan pesan error jika reason tidak diisi
         }
     }
 
 
-//    @Override
-//    public InvCountInfoDTO checkAndRemove(List<InvCountHeaderDTO> invCountHeaders) {
-//        InvCountInfoDTO result = new InvCountInfoDTO();
-//        List<InvCountHeaderDTO> errorList = new ArrayList<>();
-//        List<InvCountHeaderDTO> successList = new ArrayList<>();
-//        Long currentUserId = DetailsHelper.getUserDetails().getUserId();
-//
-//        // Fetch all existing headers by IDs from the database
-//        List<Long> headerIds = invCountHeaders.stream()
-//                .map(InvCountHeaderDTO::getCountHeaderId)
-//                .collect(Collectors.toList());
-//        List<InvCountHeader> existingHeaders = invCountHeaderRepository.findAllById(headerIds);
-//        Map<Long, InvCountHeader> headerMap = existingHeaders.stream()
-//                .collect(Collectors.toMap(InvCountHeader::getCountHeaderId, Function.identity()));
-//
-//        // 1. Pre-verification
-//        for (InvCountHeaderDTO headerDTO : invCountHeaders) {
-//            InvCountHeader existingHeader = headerMap.get(headerDTO.getCountHeaderId());
-//
-//            // Check if the header exists
-//            if (existingHeader == null) {
-//                headerDTO.setErrorMsg("Header with ID " + headerDTO.getCountHeaderId() + " not found.");
-//                errorList.add(headerDTO);
-//                continue;
-//            }
-//
-//            // Verify status: Only DRAFT status is allowed for deletion
-//            if (!"DRAFT".equalsIgnoreCase(existingHeader.getCountStatus())) {
-//                headerDTO.setErrorMsg("Document with ID " + headerDTO.getCountHeaderId() + " cannot be deleted because its status is not DRAFT.");
-//                errorList.add(headerDTO);
-//                continue;
-//            }
-//
-//            // Verify the creator of the document
-//            if (!currentUserId.equals(existingHeader.getCreatedBy())) {
-//                headerDTO.setErrorMsg("Document with ID " + headerDTO.getCountHeaderId() + " can only be deleted by its creator.");
-//                errorList.add(headerDTO);
-//                continue;
-//            }
-//
-//            // If all verifications pass, add to successList
-//            successList.add(headerDTO);
-//        }
-//
-//        // 2. Delete documents
-//        if (!successList.isEmpty()) {
-//            List<Long> removableIds = successList.stream()
-//                    .map(InvCountHeaderDTO::getCountHeaderId)
-//                    .collect(Collectors.toList());
-//            invCountHeaderRepository.deleteAllById(removableIds);
-//        }
-//
-//        // 3. Prepare results
-//        result.setErrorList(errorList);
-//        result.setSuccessList(successList);
-//        result.setTotalErrorMsg(errorList.isEmpty() ? "All documents have been successfully deleted." : "Some documents could not be deleted.");
-//        return result;
-//    }
 
     @Override
     public InvCountInfoDTO checkAndRemove(List<InvCountHeaderDTO> invCountHeaders) {
@@ -506,43 +505,43 @@ public InvCountInfoDTO manualSaveCheck(List<InvCountHeaderDTO> invCountHeaders) 
         Long userId = DetailsHelper.getUserDetails().getUserId();
         Long tenantId = DetailsHelper.getUserDetails().getTenantId();
 
-        for (InvCountHeaderDTO header : invCountHeaders) {
+        for (InvCountHeaderDTO headerExecuteCheck : invCountHeaders) {
             StringBuilder errorMessages = new StringBuilder();
 
             // a. Document status validation: Only draft status can execute
-            if (!"DRAFT".equals(header.getCountStatus())) {
+            if (!"DRAFT".equals(headerExecuteCheck.getCountStatus())) {
                 errorMessages.append("Only documents in DRAFT status can be executed. ");
             }
 
             // b. Current login user validation: Only the document creator can execute
-            if (!userId.equals(header.getCreatedBy())) {
+            if (!userId.equals(headerExecuteCheck.getCreatedBy())) {
                 errorMessages.append("Only the document creator can execute the order. ");
             }
 
             // c. Value set validation
-            if (header.getCountDimension() == null || header.getCountType() == null || header.getCountMode() == null) {
+            if (headerExecuteCheck.getCountDimension() == null || headerExecuteCheck.getCountType() == null || headerExecuteCheck.getCountMode() == null) {
                 errorMessages.append("Count dimension, type, and mode must be specified. ");
             }
 
             // d. Company, department, warehouse validation
-            if (header.getCompanyId() == null) {
+            if (headerExecuteCheck.getCompanyId() == null) {
                 errorMessages.append("Company ID is required. ");
             }
-            if (header.getWarehouseId() == null) {
+            if (headerExecuteCheck.getWarehouseId() == null) {
                 errorMessages.append("Warehouse ID is required. ");
             }
 
             // e. On-hand quantity validation
-            if (!validateOnHandQuantity(header, tenantId)) {
+            if (!validateOnHandQuantity(headerExecuteCheck, tenantId)) {
                 errorMessages.append("Unable to query on-hand quantity data. ");
             }
 
             // Collect errors or add to success list
             if (errorMessages.length() > 0) {
-                header.setErrorMsg(errorMessages.toString());
-                errorList.add(header);
+                headerExecuteCheck.setErrorMsg(errorMessages.toString());
+                errorList.add(headerExecuteCheck);
             } else {
-                successList.add(header);
+                successList.add(headerExecuteCheck);
             }
         }
 
@@ -589,19 +588,23 @@ public InvCountInfoDTO manualSaveCheck(List<InvCountHeaderDTO> invCountHeaders) 
     }
 
 
+    /**
+     * Melakukan operasi penghitungan, memperbarui status, dan mengelola data terkait.
+     * Memastikan hanya draf yang dapat dieksekusi.
+     */
     @Override
     public List<InvCountHeaderDTO> execute(List<InvCountHeaderDTO> invCountHeaders) {
         Long tenantId = DetailsHelper.getUserDetails().getTenantId();
         Long userId = DetailsHelper.getUserDetails().getUserId();
 
-        for (InvCountHeaderDTO header : invCountHeaders) {
+        for (InvCountHeaderDTO headerExecute : invCountHeaders) {
             // 1. Update the counting order status to "In counting"
-            header.setCountStatus("IN COUNTING");
-            header.setLastUpdatedBy(userId);
-            invCountHeaderRepository.updateByPrimaryKeySelective(header);
+            headerExecute.setCountStatus("IN COUNTING");
+            headerExecute.setLastUpdatedBy(userId);
+            invCountHeaderRepository.updateByPrimaryKeySelective(headerExecute);
 
             // 2. Get stock data to generate row data
-            List<InvCountLine> countLines = generateCountLines(header, tenantId);
+            List<InvCountLine> countLines = generateCountLines(headerExecute, tenantId);
 
             // Save generated count lines
             for (int i = 0; i < countLines.size(); i++) {
@@ -653,6 +656,10 @@ public InvCountInfoDTO manualSaveCheck(List<InvCountHeaderDTO> invCountHeaders) 
         return countLines;
     }
 
+    /**
+     * Mensinkronkan data penghitungan dengan WMS jika berlaku. Memeriksa jenis gudang
+     * dan memanggil API eksternal jika diperlukan.
+     */
     @Override
     public InvCountInfoDTO countSyncWms(List<InvCountHeaderDTO> invCountHeaderList) {
         InvCountInfoDTO result = new InvCountInfoDTO();
@@ -946,6 +953,10 @@ public InvCountInfoDTO manualSaveCheck(List<InvCountHeaderDTO> invCountHeaders) 
         return result;
     }
 
+    /**
+     * Mengirimkan perintah penghitungan untuk persetujuan, memulai proses alur kerja di mana dikonfigurasi.
+     * Hanya header yang valid dan dapat disetujui yang dikirim.
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public List<InvCountHeaderDTO> submit(List<InvCountHeaderDTO> invCountHeaders) {
@@ -1169,7 +1180,5 @@ public InvCountInfoDTO manualSaveCheck(List<InvCountHeaderDTO> invCountHeaders) 
                 })
                 .collect(Collectors.toList());
     }
-
-
 
 }
