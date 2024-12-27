@@ -10,6 +10,8 @@ import io.choerodon.mybatis.pagehelper.domain.PageRequest;
 import io.choerodon.mybatis.pagehelper.domain.Sort;
 import io.choerodon.swagger.annotation.Permission;
 import io.swagger.annotations.ApiOperation;
+import org.hzero.boot.platform.lov.annotation.ProcessLovValue;
+import org.hzero.core.base.BaseConstants;
 import org.hzero.core.base.BaseController;
 import org.hzero.core.util.Results;
 import org.hzero.mybatis.helper.SecurityTokenHelper;
@@ -45,11 +47,14 @@ public class InvCountHeaderController extends BaseController {
     /**
      * Mendapatkan daftar header penghitungan dengan kemampuan paging dan sorting.
      */
-    @ApiOperation(value = "列表")
+    @ApiOperation(value = "LIST")
     @Permission(level = ResourceLevel.ORGANIZATION)
+    @ProcessLovValue(targetField = BaseConstants.FIELD_BODY)
     @GetMapping
-    public ResponseEntity<Page<InvCountHeader>> list(InvCountHeader invCountHeader, @PathVariable Long organizationId, @ApiIgnore @SortDefault(value = InvCountHeader.FIELD_COUNT_HEADER_ID, direction = Sort.Direction.DESC) PageRequest pageRequest) {
-        Page<InvCountHeader> list = invCountHeaderService.selectList(pageRequest, invCountHeader);
+    public ResponseEntity<Page<InvCountHeaderDTO>> list(InvCountHeaderDTO invCountHeaderDTO, @PathVariable Long organizationId,
+                                                     @ApiIgnore @SortDefault(value = InvCountHeader.FIELD_COUNT_HEADER_ID, // TODO update sortD
+                                                             direction = Sort.Direction.DESC) PageRequest pageRequest) {
+        Page<InvCountHeaderDTO> list = invCountHeaderService.list(pageRequest, invCountHeaderDTO);
         return Results.success(list);
     }
 
@@ -58,9 +63,10 @@ public class InvCountHeaderController extends BaseController {
      */
     @ApiOperation(value = "Details")
     @Permission(level = ResourceLevel.ORGANIZATION)
+    @ProcessLovValue(targetField = BaseConstants.FIELD_BODY)
     @GetMapping("/{countHeaderId}/detail")
     public ResponseEntity<InvCountHeader> detail(@PathVariable Long countHeaderId) {
-        InvCountHeader invCountHeader = invCountHeaderRepository.selectByPrimary(countHeaderId);
+        InvCountHeader invCountHeader = invCountHeaderService.detail(countHeaderId);
         return Results.success(invCountHeader);
     }
 
@@ -109,10 +115,11 @@ public class InvCountHeaderController extends BaseController {
     @Permission(level = ResourceLevel.ORGANIZATION)
     @DeleteMapping("/checkAndRemove")
     public ResponseEntity<?> checkAndRemove(@PathVariable Long organizationId, @RequestBody List<InvCountHeaderDTO > invCountHeaders) {
-        SecurityTokenHelper.validToken(invCountHeaders);
-        invCountHeaders.forEach(header -> header.setTenantId(organizationId));
-        invCountHeaderService.checkAndRemove(invCountHeaders);
-        return Results.success();
+        SecurityTokenHelper.validToken(invCountHeaders); // Validasi token keamanan pada daftar header
+        // todo ga perlua da forEach
+        invCountHeaders.forEach(header -> header.setTenantId(organizationId)); // Set tenantId untuk setiap header berdasarkan organizationId
+        invCountHeaderService.checkAndRemove(invCountHeaders); // Panggil service untuk memproses penghapusan header
+        return Results.success();// Kembalikan respons berhasil
     }
 
     /**

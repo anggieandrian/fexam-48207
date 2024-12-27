@@ -93,3 +93,7 @@ logging:
     io.choerodon: debug
     org.hzero: debug
     com.hand.demo: debug
+hzero:
+  lov:
+    sql:
+      enabled: true

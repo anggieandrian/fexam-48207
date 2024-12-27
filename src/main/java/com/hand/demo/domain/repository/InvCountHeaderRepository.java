@@ -31,10 +31,6 @@ public interface InvCountHeaderRepository extends BaseRepository<InvCountHeader>
      */
     InvCountHeader selectByPrimary(Long countHeaderId);
 
-    void deleteAllById(List<Long> removableIds);
-
-    List<InvCountHeader> findAllById(List<Long> headerIds);
-
     Optional<InvCountHeader> findById(Long id);
 
     void deleteById(Long id);
@@ -45,5 +41,5 @@ public interface InvCountHeaderRepository extends BaseRepository<InvCountHeader>
 
     List<InvCountHeader> selectByCriteria(InvCountHeaderDTO filterDTO);
 
-
+    void deleteByIds(List<Long> removableIds);
 }

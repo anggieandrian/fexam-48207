@@ -18,9 +18,7 @@ public class InvCountHeaderDTO extends InvCountHeader {
     private String errorMsg;
     private String status;
     private List<UserDTO> counterList;
-    private String supervisorList;
-    private String snapshotMaterialList;
-    private String snapshotBatchList;
+    private List<UserDTO> supervisorList;
     private Boolean isWmsWarehouse;
     private Date createdDate;
 
@@ -28,11 +26,12 @@ public class InvCountHeaderDTO extends InvCountHeader {
    @Transient
     private List<InvCountLineDTO> invCountLineDTOList;
 
+    private List<SnapshotMaterialDTO> snapshotMaterialList; // Update type
+    private List<SnapshotBatchDTO> snapshotBatchList;
+
     private String countStatusMeaning;
     private String countDimensionMeaning;
     private String countTypeMeaning;
     private String countModeMeaning;
-
-
-
+    private String supervisor;
 }

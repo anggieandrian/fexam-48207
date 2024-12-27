@@ -3,6 +3,7 @@ package com.hand.demo.app.service;
 import com.hand.demo.api.dto.InvCountHeaderDTO;
 import com.hand.demo.api.dto.InvCountInfoDTO;
 import com.hand.demo.api.dto.WorkFlowEventDTO;
+import com.hand.demo.domain.entity.InvCountLine;
 import io.choerodon.core.domain.Page;
 import io.choerodon.mybatis.pagehelper.domain.PageRequest;
 import com.hand.demo.domain.entity.InvCountHeader;
@@ -26,7 +27,8 @@ public interface InvCountHeaderService {
      * @param invCountHeaders 查询条件
      * @return 返回值
      */
-    Page<InvCountHeader> selectList(PageRequest pageRequest, InvCountHeader invCountHeaders);
+
+    Page<InvCountHeaderDTO> list(PageRequest pageRequest, InvCountHeaderDTO invCountHeaders);
 
     /**
      * 保存数据

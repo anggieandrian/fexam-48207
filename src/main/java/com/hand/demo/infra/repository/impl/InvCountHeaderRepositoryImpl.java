@@ -10,7 +10,12 @@ import com.hand.demo.domain.repository.InvCountHeaderRepository;
 import com.hand.demo.infra.mapper.InvCountHeaderMapper;
 
 import javax.annotation.Resource;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * (InvCountHeader)资源库
@@ -29,6 +34,11 @@ public class InvCountHeaderRepositoryImpl extends BaseRepositoryImpl<InvCountHea
 
     @Override
     public List<InvCountHeader> selectList(InvCountHeader invCountHeader) {
+        if (invCountHeader == null) {
+            throw new IllegalArgumentException("Search criteria cannot be null.");
+        }
+
+        // Gunakan MyBatis Mapper untuk query dinamis
         return invCountHeaderMapper.selectList(invCountHeader);
     }
 
@@ -43,45 +53,6 @@ public class InvCountHeaderRepositoryImpl extends BaseRepositoryImpl<InvCountHea
         return invCountHeaders.get(0);
     }
 
-    @Override
-    public void deleteAllById(List<Long> removableIds) {
-        // Validasi: Pastikan removableIds tidak null atau kosong
-        if (removableIds == null || removableIds.isEmpty()) {
-            throw new IllegalArgumentException("Daftar ID yang dapat dihapus tidak boleh kosong.");
-        }
-
-        // Iterasi setiap ID dan hapus dari database
-        for (Long id : removableIds) {
-            try {
-                // Validasi: Pastikan ID tidak null
-                if (id == null) {
-                    throw new IllegalArgumentException("ID tidak boleh null.");
-                }
-
-                // Ambil data berdasarkan ID untuk validasi keberadaan
-                Optional<InvCountHeader> existingHeaderOpt = invCountHeaderRepository.findById(id);
-                if (!existingHeaderOpt.isPresent()) {
-                    throw new IllegalArgumentException("Header dengan ID " + id + " tidak ditemukan.");
-                }
-
-                // Hapus data menggunakan repository
-                invCountHeaderRepository.deleteById(id);
-
-            } catch (Exception e) {
-                // Tangani error dan lanjutkan ke ID berikutnya
-                System.err.println("Gagal menghapus ID " + id + ": " + e.getMessage());
-            }
-        }
-
-        // Log hasil penghapusan
-        System.out.println("Proses penghapusan selesai untuk ID: " + removableIds);
-    }
-
-
-    @Override
-    public List<InvCountHeader> findAllById(List<Long> headerIds) {
-        return Collections.emptyList();
-    }
 
     @Override
     public Optional<InvCountHeader> findById(Long id) {
@@ -195,5 +166,23 @@ public class InvCountHeaderRepositoryImpl extends BaseRepositoryImpl<InvCountHea
         return resultList;
     }
 
+    @Override
+    public void deleteByIds(List<Long> removableIds) {
+        // 1. Validasi input
+        if (removableIds == null || removableIds.isEmpty()) {
+            throw new IllegalArgumentException("The list of IDs to delete cannot be null or empty.");
+            // Jika daftar ID null atau kosong, lemparkan IllegalArgumentException.
+        }
+
+        // 2. Menggabungkan ID untuk digunakan dalam SQL query
+        String joinedIds = removableIds.stream() // Gunakan stream untuk memproses daftar ID
+                .map(String::valueOf) // Konversi setiap ID menjadi String
+                .collect(Collectors.joining(",")); // Gabungkan ID dengan pemisah koma
+
+        // untuk ngambil data dari header
+        List<InvCountHeader> header = this.selectByIds(joinedIds);
+        this.batchDeleteByPrimaryKey(header);
+
+    }
 
 }

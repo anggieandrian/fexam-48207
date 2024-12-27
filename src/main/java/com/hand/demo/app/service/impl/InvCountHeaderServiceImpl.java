@@ -67,9 +67,10 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
      * mendukung pagination dan sorting.
      */
     @Override
-    public Page<InvCountHeader> selectList(PageRequest pageRequest, InvCountHeader invCountHeader) {
-        return PageHelper.doPageAndSort(pageRequest, () -> invCountHeaderRepository.selectList(invCountHeader));
+    public Page<InvCountHeaderDTO> list(PageRequest pageRequest, InvCountHeaderDTO invCountHeaders) {
+        return PageHelper.doPageAndSort(pageRequest, () -> invCountHeaderRepository.selectList(invCountHeaders));
     }
+
 
     /**
      * Menyimpan daftar header penghitungan, membedakan antara insert dan update.
@@ -369,70 +370,100 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
     }
 
 
-
     @Override
     public InvCountInfoDTO checkAndRemove(List<InvCountHeaderDTO> invCountHeaders) {
-        InvCountInfoDTO result = new InvCountInfoDTO();
-        List<InvCountHeaderDTO> errorList = new ArrayList<>();
-        List<InvCountHeaderDTO> successList = new ArrayList<>();
-        Long currentUserId = DetailsHelper.getUserDetails().getUserId();
+        // Inisialisasi hasil
+        InvCountInfoDTO result = new InvCountInfoDTO(); // Objek hasil yang akan menyimpan daftar sukses dan error
+        List<InvCountHeaderDTO> errorList = new ArrayList<>(); // List untuk menyimpan header yang gagal validasi
+        List<Long> headerIds = invCountHeaders.stream() // Ambil semua ID header dari input
+                .map(InvCountHeaderDTO::getCountHeaderId) // Ekstrak countHeaderId dari setiap DTO
+                .filter(Objects::nonNull) // Hanya ambil ID yang tidak null
+                .collect(Collectors.toList()); // Kumpulkan ke dalam daftar
 
+        // Jika tidak ada ID valid, langsung kembalikan semua sebagai error
+        if (headerIds.isEmpty()) {
+            result.setErrorList(invCountHeaders); // Semua header dianggap error karena tidak ada ID
+            return result; // Kembalikan hasil proses
+        }
+
+        // Ambil header yang valid dari database dalam satu query menggunakan MyBatis
+        List<InvCountHeader> existingHeaders = invCountHeaderRepository.selectByIds(headerIds.stream()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","))); // di ubah menjadi string
+
+        // Peta untuk akses cepat header berdasarkan ID
+        Map<Long, InvCountHeader> headerMap = existingHeaders.stream() // Stream dari daftar hasil query
+                .collect(Collectors.toMap(InvCountHeader::getCountHeaderId, h -> h)); // Konversi ke Map dengan ID sebagai kunci
+
+        // List untuk menyimpan ID dokumen yang bisa dihapus
+        List<Long> removableIds = new ArrayList<>();
+        Long currentUserId = DetailsHelper.getUserDetails().getUserId(); // Ambil ID pengguna saat ini
+
+        // Iterasi header input untuk validasi
         for (InvCountHeaderDTO headerDTO : invCountHeaders) {
-            InvCountHeader existingHeader = invCountHeaderRepository.selectByPrimary(headerDTO.getCountHeaderId());
-            if (existingHeader == null) {
-                headerDTO.setErrorMsg("Header not found for ID: " + headerDTO.getCountHeaderId());
-                errorList.add(headerDTO);
-                continue;
+            InvCountHeader existingHeader = headerMap.get(headerDTO.getCountHeaderId()); // Cari header di database berdasarkan ID
+            if (existingHeader == null) { // Jika header tidak ditemukan
+                headerDTO.setErrorMsg("Header not found for ID: " + headerDTO.getCountHeaderId()); // Set pesan error
+                errorList.add(headerDTO); // Tambahkan ke daftar error
+            } else if (!"DRAFT".equalsIgnoreCase(existingHeader.getCountStatus())) { // Jika status bukan DRAFT
+                headerDTO.setErrorMsg("Only DRAFT status can be deleted."); // Set pesan error
+                errorList.add(headerDTO); // Tambahkan ke daftar error
+            } else if (!currentUserId.equals(existingHeader.getCreatedBy())) { // Jika pengguna bukan pencipta dokumen
+                headerDTO.setErrorMsg("Only the creator can delete the document."); // Set pesan error
+                errorList.add(headerDTO); // Tambahkan ke daftar error
+            } else {
+                // Jika semua validasi lolos, tambahkan ID ke daftar removable
+                removableIds.add(headerDTO.getCountHeaderId());
             }
-
-            if (!"DRAFT".equalsIgnoreCase(existingHeader.getCountStatus())) {
-                headerDTO.setErrorMsg("Only DRAFT status can be deleted.");
-                errorList.add(headerDTO);
-                continue;
-            }
-
-            if (!currentUserId.equals(existingHeader.getCreatedBy())) {
-                headerDTO.setErrorMsg("Only the creator can delete the document.");
-                errorList.add(headerDTO);
-                continue;
-            }
-
-            successList.add(headerDTO);
         }
 
-        if (!successList.isEmpty()) {
-            List<Long> removableIds = successList.stream()
-                    .map(InvCountHeaderDTO::getCountHeaderId)
-                    .collect(Collectors.toList());
-            invCountHeaderRepository.deleteAllById(removableIds);
+        // Jika ada dokumen yang valid untuk dihapus
+        // TODO tambahkaan bila code sudah salah mau di apakah
+        if (!removableIds.isEmpty()) {
+            invCountHeaderRepository.deleteByIds(removableIds); // Hapus dokumen dengan batch query
         }
 
-        result.setSuccessList(successList);
-        result.setErrorList(errorList);
-        return result;
+        // Set hasil proses
+        result.setSuccessList(invCountHeaders.stream() // Filter header yang berhasil dihapus
+                .filter(header -> removableIds.contains(header.getCountHeaderId())) // Hanya header dengan ID yang valid
+                .collect(Collectors.toList())); // Kumpulkan ke dalam daftar sukses
+        result.setErrorList(errorList); // Set daftar error
+        return result; // Kembalikan hasil proses
     }
+
 
     @Override
     public InvCountHeaderDTO detail(Long countHeaderId) {
-        // Fetch header data
-        InvCountHeader header = invCountHeaderRepository.selectByPrimary(countHeaderId);
-        if (header == null) {
-            throw new IllegalArgumentException("Count Header not found for id: " + countHeaderId);
+        // ga udh tambahin output di tambahin
+        // Validate the input parameter to ensure it's not null
+        if (countHeaderId == null) {
+            throw new IllegalArgumentException("Count Header ID cannot be null.");
         }
 
-        // Convert to DTO
+        // Step 1: Fetch header data
+        // Fetch the InvCountHeader entity from the repository using the provided ID
+        InvCountHeader header = invCountHeaderRepository.selectByPrimary(countHeaderId);
+        if (header == null) {
+            // ganti IllegalArgumentException = com
+            throw new IllegalArgumentException("Count Header not found for ID: " + countHeaderId);
+        }
+
+        // Step 2: Convert entity to DTO
+        // Create a DTO object and copy properties from the entity
         InvCountHeaderDTO headerDTO = new InvCountHeaderDTO();
         BeanUtils.copyProperties(header, headerDTO);
 
-        // Fetch isWMSwarehouse
+        // Step 3: Fetch the isWMSWarehouse status
+        // Determine if the associated warehouse is a WMS warehouse
         headerDTO.setIsWmsWarehouse(fetchIsWmsWarehouse(header.getWarehouseId()));
 
-        // Fetch invCountLineDTOList
-        List<InvCountLine> countLines = invCountLineRepository.selectList(new InvCountLine() {{
-            setCountHeaderId(countHeaderId);
-        }});
-        List<InvCountLineDTO> countLineDTOList = countLines.stream()
+        // Step 4: Fetch the list of related InvCountLineDTO objects
+        // Retrieve lines associated with the header ID and map them to DTOs
+        List<InvCountLineDTO> countLineDTOList = invCountLineRepository.selectList(new InvCountLine() {{
+                    setCountHeaderId(countHeaderId); // Filter lines by countHeaderId
+                }}).stream()
                 .map(line -> {
+                    // Convert each InvCountLine entity to InvCountLineDTO
                     InvCountLineDTO lineDTO = new InvCountLineDTO();
                     BeanUtils.copyProperties(line, lineDTO);
                     return lineDTO;
@@ -440,80 +471,112 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
                 .collect(Collectors.toList());
         headerDTO.setInvCountLineDTOList(countLineDTOList);
 
-        // Parse additional fields
-        headerDTO.setCounterList(parseCounterList((String) header.getCounterIds()));
-        headerDTO.setSupervisorList(parseSupervisorList((String) header.getSupervisorIds()).toString());
-        headerDTO.setSnapshotMaterialList(parseSnapshotMaterialList((String) header.getSnapshotMaterialIds()).toString());
-        headerDTO.setSnapshotBatchList(parseSnapshotBatchList((String) header.getSnapshotBatchIds()).toString());
+        // Step 5: Parse additional fields and set them in the DTO
+        // Convert string fields to lists of UserDTO or specialized DTOs as needed
+        headerDTO.setCounterList(parseCounterList(header.getCounterIds())); // Parse counter IDs
+        headerDTO.setSupervisorList(parseSupervisorList(header.getSupervisorIds())); // Parse supervisor IDs
+        headerDTO.setSnapshotMaterialList(parseSnapshotMaterialList(header.getSnapshotMaterialIds())); // Parse material snapshot IDs
+        headerDTO.setSnapshotBatchList(parseSnapshotBatchList(header.getSnapshotBatchIds())); // Parse batch snapshot IDs
 
-        return headerDTO;
+        return headerDTO; // Return the fully constructed DTO
     }
 
+    /**
+     * Fetch the isWMSWarehouse status for the given warehouse ID.
+     */
     private Boolean fetchIsWmsWarehouse(Long warehouseId) {
+        // Return null if warehouseId is not provided
         if (warehouseId == null) return null;
+
+        // Retrieve warehouse entity using the repository
         InvWarehouse warehouse = invWarehouseRepository.selectByPrimary(warehouseId);
+
+        // Return true if the warehouse has the isWMSWarehouse flag set to 1
         return warehouse != null && warehouse.getIsWmsWarehouse() == 1;
     }
 
+    /**
+     * Parse a comma-separated list of counter IDs into a list of UserDTO objects.
+     */
     private List<UserDTO> parseCounterList(String counterIds) {
+        // Return an empty list if the input is null or empty
         if (counterIds == null || counterIds.isEmpty()) {
-            return Collections.emptyList(); // Mengembalikan list kosong jika null atau kosong
+            return Collections.emptyList();
         }
 
-        // Memproses counterIds dan mengonversi ke List<UserDTO>
+        // Split the string by commas and map each ID to a UserDTO
         return Arrays.stream(counterIds.split(","))
                 .map(id -> {
-                    UserDTO userDTO = new UserDTO();
-                    userDTO.setId(Long.valueOf(id.trim())); // Set ID (asumsikan Long)
-                    // Set realName (ubah sesuai logika bisnis)
-                    return userDTO;
+                    UserDTO user = new UserDTO();
+                    user.setId(Long.valueOf(id)); // Set the ID for each UserDTO
+                    return user;
                 })
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Parse a comma-separated list of supervisor IDs into a list of UserDTO objects.
+     */
+    private List<UserDTO> parseSupervisorList(String supervisorIds) {
+        // Return an empty list if the input is null or empty
+        if (supervisorIds == null || supervisorIds.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-    private List<Map<String, String>> parseSupervisorList(String supervisorIds) {
-        if (supervisorIds == null || supervisorIds.isEmpty()) return Collections.emptyList();
-
+        // Split the string by commas and map each ID to a UserDTO
         return Arrays.stream(supervisorIds.split(","))
                 .map(id -> {
-                    Map<String, String> map = new HashMap<>();
-                    map.put("id", id);
-                    map.put("realName", "ZH" + id);
-                    return map;
+                    UserDTO user = new UserDTO();
+                    user.setId(Long.valueOf(id)); // Set the ID for each UserDTO
+                    return user;
                 })
                 .collect(Collectors.toList());
     }
 
-
-    private List<Map<String, String>> parseSnapshotMaterialList(String snapshotMaterialIds) {
+    /**
+     * Parse a string of snapshot material IDs into a list of SnapshotMaterialDTO objects.
+     * Example Input: "1_item1,2_item2"
+     * Example Output: [SnapshotMaterialDTO(id="1", code="item1"), SnapshotMaterialDTO(id="2", code="item2")]
+     */
+    private List<SnapshotMaterialDTO> parseSnapshotMaterialList(String snapshotMaterialIds) {
+        // Return an empty list if the input is null or empty
         if (snapshotMaterialIds == null || snapshotMaterialIds.isEmpty()) {
             return Collections.emptyList();
         }
 
+        // Split the string by commas and map each entry to a SnapshotMaterialDTO
         return Arrays.stream(snapshotMaterialIds.split(","))
                 .map(entry -> {
-                    String[] parts = entry.split("_");
+                    String[] parts = entry.split("_"); // Split each entry into ID and Code
                     if (parts.length == 2) {
-                        Map<String, String> map = new HashMap<>();
-                        map.put("id", parts[0]);
-                        map.put("code", parts[1]);
-                        return map;
+                        SnapshotMaterialDTO dto = new SnapshotMaterialDTO();
+                        dto.setId(parts[0].trim()); // Set ID
+                        dto.setCode(parts[1].trim()); // Set Code
+                        return dto;
                     }
                     throw new IllegalArgumentException("Invalid snapshot material format: " + entry);
                 })
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Parse a string of snapshot batch IDs into a list of SnapshotBatchDTO objects.
+     * Example Input: "1,2,3"
+     * Example Output: [SnapshotBatchDTO(batchId="1", batchCode="b1"), ...]
+     */
+    private List<SnapshotBatchDTO> parseSnapshotBatchList(String snapshotBatchIds) {
+        // Return an empty list if the input is null or empty
+        if (snapshotBatchIds == null || snapshotBatchIds.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-    private List<Map<String, String>> parseSnapshotBatchList(String snapshotBatchIds) {
-        if (snapshotBatchIds == null || snapshotBatchIds.isEmpty()) return Collections.emptyList();
+        // Split the string by commas and map each ID to a SnapshotBatchDTO
         return Arrays.stream(snapshotBatchIds.split(","))
                 .map(batchId -> {
-                    Map<String, String> map = new HashMap<>();
-                    map.put("batchId", batchId);
-                    map.put("batchCode", "b" + batchId);
-                    return map;
+                    SnapshotBatchDTO dto = new SnapshotBatchDTO();
+                    dto.setBatchId(batchId.trim()); // Set Batch ID
+                    dto.setBatchCode("b" + batchId.trim()); // Create Batch Code with prefix "b"
+                    return dto;
                 })
                 .collect(Collectors.toList());
     }
@@ -1227,7 +1290,7 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
 
                     // Fetch dan set tambahan informasi terkait Counter dan Supervisor
                     dto.setCounterList(fetchCounterList(header.getCounterIds()));
-                    dto.setSupervisorList(header.getSupervisorIds()); // SupervisorList disimpan langsung sebagai String
+//                    dto.setSupervisorList(header.getSupervisorIds()); // SupervisorList disimpan langsung sebagai String
 
                     return dto;
                 })
