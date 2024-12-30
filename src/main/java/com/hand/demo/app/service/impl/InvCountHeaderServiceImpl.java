@@ -117,9 +117,8 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
                 header.setTenantId(tenantId); // Jika kosong, isi dengan tenant ID saat ini
             } else if (!tenantId.equals(header.getTenantId())) {
                 errorMessages.append("Invalid Tenant ID. "); // Tambahkan pesan error jika tenant tidak cocok
+
             }
-
-
             // TOdo tambahkan untuk sat insert list berhasil baru lanjut ke tahap berikutnya
             // Validasi countStatu
             String status = header.getCountStatus();
@@ -575,7 +574,6 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
     }
 
 
-
     @Override
     public InvCountInfoDTO orderExecution(List<InvCountHeaderDTO> orderExecutionHeaders) {
         InvCountInfoDTO result = new InvCountInfoDTO();
@@ -608,11 +606,13 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
 
         // Langkah 4: Eksekusi counting order
         // Ubah status dokumen dan buat count line berdasarkan data stok
-        execute(executionValidationResult.getSuccessList());
+        // ada di execute
+        execute(executionValidationResult.getSuccessList());//*
 
         // Langkah 5: Sinkronisasi dengan WMS
         // Sinkronisasi hasil eksekusi dengan sistem Warehouse Management System (WMS)
-        InvCountInfoDTO syncResult = countSyncWms(executionValidationResult.getSuccessList());
+        // ada di countSyncWms
+        InvCountInfoDTO syncResult = countSyncWms(executionValidationResult.getSuccessList()); //*
 
         // Jika sinkronisasi WMS gagal, kembalikan daftar error
         if (syncResult.getErrorList() != null && !syncResult.getErrorList().isEmpty()) {
@@ -650,11 +650,12 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
             }
 
             // c. Validasi atribut yang wajib diisi (dimension, type, mode)
+            // todo tambahkan lovValue untuk disini
             if (headerExecuteCheck.getCountDimension() == null || headerExecuteCheck.getCountType() == null || headerExecuteCheck.getCountMode() == null) {
                 errorMessages.append("Count dimension, type, and mode must be specified. ");
             }
 
-            // d. Validasi atribut organisasi (company, department, warehouse)
+            // d. Validasi atribut organisasi (company, department, warehouse) // query the compayid, departmentid, warehouseid
             if (headerExecuteCheck.getCompanyId() == null) {
                 errorMessages.append("Company ID is required. ");
             }
@@ -685,39 +686,50 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
     }
 
     private boolean validateOnHandQuantity(InvCountHeaderDTO header, Long tenantId) {
+        // 1. Membuat objek kriteria pencarian stok
         InvStock stockCriteria = new InvStock();
-        stockCriteria.setTenantId(tenantId);
-        stockCriteria.setCompanyId(header.getCompanyId());
-        stockCriteria.setDepartmentId(header.getDepartmentId());
-        stockCriteria.setWarehouseId(header.getWarehouseId());
-        stockCriteria.setBatchId(parseBatchId((String) header.getSnapshotBatchIds()));
-        stockCriteria.setMaterialId(parseMaterialId((String) header.getSnapshotMaterialIds()));
+        stockCriteria.setTenantId(tenantId); // Tenant ID untuk membatasi data sesuai dengan tenant yang relevan
+        stockCriteria.setCompanyId(header.getCompanyId()); // Filter berdasarkan Company ID
+        stockCriteria.setDepartmentId(header.getDepartmentId()); // Filter berdasarkan Department ID
+        stockCriteria.setWarehouseId(header.getWarehouseId()); // Filter berdasarkan Warehouse ID
+        // TODO yang di bawah tolong disesuaikan untuk sama sama string
+        stockCriteria.setBatchId(parseBatchId((String) header.getSnapshotBatchIds())); // Batch ID dari snapshot batch
+        stockCriteria.setMaterialId(parseMaterialId((String) header.getSnapshotMaterialIds())); // Material ID dari snapshot material
 
-        // Check stock with available quantity > 0
+        // 2. Mengeksekusi query untuk mendapatkan daftar stok
         List<InvStock> stocks = invStockRepository.selectList(stockCriteria);
+        // - Query ini mengembalikan daftar stok yang memenuhi kriteria yang telah diatur di atas.
+
+        // 3. Validasi apakah ada stok yang memiliki kuantitas lebih besar dari nol
         return stocks.stream().anyMatch(stock -> stock.getAvailableQuantity().compareTo(BigDecimal.ZERO) > 0);
+        // - Menggunakan `stream` untuk memeriksa apakah ada stok dengan `AvailableQuantity` > 0.
+        // - Jika ditemukan setidaknya satu stok yang memenuhi, kembalikan `true`, jika tidak, kembalikan `false`.
     }
 
-    // Fungsi untuk mengubah batch ID dari String ke Long
+    // Fungsi untuk mengubah Batch ID dari String ke Long
     private Long parseBatchId(String snapshotBatchIds) {
         if (snapshotBatchIds == null || snapshotBatchIds.isEmpty()) {
-            return null;
+            return null; // Jika batch ID tidak ada atau kosong, kembalikan `null`.
         }
-        // Menggunakan batch ID pertama untuk validasi
+        // Mengambil Batch ID pertama dari string yang dipisahkan dengan koma
         return Long.parseLong(snapshotBatchIds.split(",")[0]);
+        // - `split(",")` membagi string berdasarkan koma.
+        // - `parseLong` mengonversi string ID pertama menjadi Long.
+        // - Contoh: "123,456" akan mengembalikan `123` sebagai Long.
     }
 
-    // Fungsi untuk mengubah material ID dari String ke Long
+    // Fungsi untuk mengubah Material ID dari String ke Long
     private Long parseMaterialId(String snapshotMaterialIds) {
         if (snapshotMaterialIds == null || snapshotMaterialIds.isEmpty()) {
-            return null;
-        }
-        // Menggunakan material ID pertama untuk validasi
+            return null; // Jika material ID tidak ada atau kosong, kembalikan `null`.
+        } // Membagi material ID pertama berdasarkan koma, lalu garis bawah
         String[] parts = snapshotMaterialIds.split(",")[0].split("_");
-        if (parts.length == 2) {
+        if (parts.length == 2) { // Jika formatnya valid (dua bagian: ID dan kode), ambil ID sebagai Long
             return Long.parseLong(parts[0]);
-        }
+        } // Jika format tidak valid, lemparkan pengecualian
         throw new IllegalArgumentException("Invalid material ID format: " + snapshotMaterialIds);
+        // - Contoh valid: "123_item1" -> ID = 123.
+        // - Jika format tidak memiliki dua bagian, pengecualian akan dilempar.
     }
 
 
@@ -729,13 +741,14 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
         for (InvCountHeaderDTO headerExecute : invCountHeaders) {
             // Langkah 1: Perbarui status dokumen ke "PROCESSING"
             headerExecute.setCountStatus("PROCESSING"); // Ubah status menjadi PROCESSING
-            headerExecute.setLastUpdatedBy(userId); // Catat siapa yang memperbarui dokumen
+            headerExecute.setLastUpdatedBy(userId); // Catat siapa yang memperbarui dokumen todo hapus saja
             invCountHeaderRepository.updateByPrimaryKeySelective(headerExecute); // Simpan perubahan status ke database
 
             // Langkah 2: Ambil data stok untuk menghasilkan count lines
-            List<InvCountLine> countLines = generateCountLines(headerExecute, tenantId);
+            List<InvCountLine> countLines = generateCountLines(headerExecute, tenantId); // *
 
             // Langkah 3: Simpan count lines yang dihasilkan
+            // insert data
             for (int i = 0; i < countLines.size(); i++) {
                 InvCountLine countLine = countLines.get(i);
                 countLine.setLineNumber(i + 1); // Tetapkan nomor baris secara berurutan
@@ -756,6 +769,7 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
         stockCriteria.setCompanyId(header.getCompanyId()); // Company ID dari header
         stockCriteria.setDepartmentId(header.getDepartmentId()); // Department ID dari header
         stockCriteria.setWarehouseId(header.getWarehouseId()); // Warehouse ID dari header
+        // buat jadi sama sama string
         stockCriteria.setBatchId(parseBatchId((String) header.getSnapshotBatchIds())); // Batch ID dari header
         stockCriteria.setMaterialId(parseMaterialId((String) header.getSnapshotMaterialIds())); // Material ID dari header
 
@@ -780,7 +794,6 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
             countLine.setCounterIds(header.getCounterIds()); // Counter ID dari header
             countLines.add(countLine); // Tambahkan ke daftar count lines
         }
-
         return countLines; // Kembalikan daftar count lines
     }
 
@@ -796,6 +809,7 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
             try {
                 // a. Validasi warehouseId pada header
                 if (header.getWarehouseId() == null) {
+                    // todo IllegalArgumentException ubah ini
                     throw new IllegalArgumentException("Warehouse ID is missing for Count Header ID: " + header.getCountHeaderId());
                 }
 
@@ -805,10 +819,11 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
                     setTenantId(tenantId);
                 }});
                 if (warehouse == null) {
+                    // todo IllegalArgumentException ubah ini
                     throw new IllegalArgumentException("Warehouse not found for ID: " + header.getWarehouseId());
                 }
 
-                // b. Validasi atau inisialisasi data tambahan
+                // b. Validasi atau inisialisasi data tambahan **
                 InvCountExtra syncStatusExtra = getOrCreateExtra(tenantId, header.getCountHeaderId(), "wms_sync_status", "SKIP");
                 InvCountExtra syncMsgExtra = getOrCreateExtra(tenantId, header.getCountHeaderId(), "wms_sync_error_message", "");
 
@@ -829,7 +844,7 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
                         }
                     }
 
-                    // Panggil API WMS melalui InterfaceInvokeSdk
+                    // Panggil API WMS melalui InterfaceInvokeSdk *
                     ResponsePayloadDTO response = invokeInterface(
                             payload.toString(), // Parameter payload
                             "HZERO",            // Namespace API
@@ -845,7 +860,9 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
                         header.setRelatedWmsOrderCode(String.valueOf(response.getStatusCode()));
                     } else if (response != null) {
                         syncStatusExtra.setProgramValue("ERROR");
-                        syncMsgExtra.setProgramValue(response.getMessage());
+                        syncMsgExtra.setProgramValue(response
+                                .getMessage());
+                        //todo
                         throw new IllegalStateException("WMS synchronization failed: " + response.getMessage());
                     } else {
                         throw new IllegalStateException("WMS synchronization returned null response.");
@@ -1083,22 +1100,21 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
     }
 
 
-    /**
-     * Mengirimkan perintah penghitungan untuk persetujuan, memulai proses alur kerja di mana dikonfigurasi.
-     * Hanya header yang valid dan dapat disetujui yang dikirim.
-     */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class) // Transaksi dengan rollback jika terjadi exception
     public List<InvCountHeaderDTO> submit(List<InvCountHeaderDTO> invCountHeaders) {
+        // Langkah 1: Validasi input
+        // Periksa apakah daftar dokumen counting order kosong atau null
         if (invCountHeaders == null || invCountHeaders.isEmpty()) {
             throw new IllegalArgumentException("The list of count headers cannot be null or empty.");
         }
 
-        List<InvCountHeader> invheaders = new ArrayList<>();
-        Long tenantId = DetailsHelper.getUserDetails().getTenantId();
-        Long userId = DetailsHelper.getUserDetails().getUserId();
+        List<InvCountHeader> invheaders = new ArrayList<>(); // Daftar untuk header yang akan diperbarui
+        Long tenantId = DetailsHelper.getUserDetails().getTenantId(); // Ambil Tenant ID
+        Long userId = DetailsHelper.getUserDetails().getUserId(); // Ambil User ID
 
-        // Fetch workflow configuration
+        // Langkah 2: Ambil konfigurasi workflow
+        // Memeriksa apakah workflow aktif dengan mengambil nilai profil konfigurasi
         String workflowFlag = profileClient.getProfileValueByOptions(
                 tenantId,
                 null,
@@ -1106,96 +1122,114 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
                 "FEXAM07.INV.COUNTING.ISWORKFLOW"
         );
 
-        // Collect department IDs for mapping
+        // Langkah 3: Ambil mapping kode departemen
+        // Mengumpulkan dan memetakan Department ID ke Department Code
         Set<Long> departmentIds = invCountHeaders.stream()
                 .map(InvCountHeaderDTO::getDepartmentId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
+        Map<Long, String> departmentCodeMap = fetchDepartmentCodes(departmentIds); // Pemetaan ID ke kode departemen
 
-        Map<Long, String> departmentCodeMap = fetchDepartmentCodes(departmentIds);
-
-        Date currentTime = new Date();
+        Date currentTime = new Date(); // Waktu sekarang untuk pembaruan status
 
         for (InvCountHeaderDTO header : invCountHeaders) {
+            // Langkah 4: Validasi dokumen
+            // Memastikan dokumen valid untuk diajukan (status harus PROCESSING atau WITHDRAWN)
             validateHeaderForSubmission(header);
 
-            if ("1".equals(workflowFlag)) {
-                // Start workflow process
-                startWorkflowProcess(header, tenantId, userId, departmentCodeMap);
-                invheaders.add(header);
+            if ("1".equals(workflowFlag)) { // Jika workflow aktif
+                // Langkah 5a: Mulai proses workflow
+                startWorkflowProcess(header, tenantId, userId, departmentCodeMap); // Jalankan alur kerja
+                invheaders.add(header); // Tambahkan ke daftar dokumen untuk pembaruan
             } else {
-                // Update document status directly
-                confirmDocumentStatus(header, currentTime, userId);
+                // Langkah 5b: Perbarui status dokumen langsung
+                confirmDocumentStatus(header, currentTime, userId); // Set status ke CONFIRMED
             }
         }
 
-        // Batch update headers in the database
+        // Langkah 6: Perbarui semua dokumen dalam batch
         invCountHeaderRepository.batchUpdateOptional(
                 invheaders,
-                InvCountHeader.FIELD_COUNT_STATUS,
-                InvCountHeader.FIELD_WORKFLOW_ID,
-                InvCountHeader.FIELD_APPROVED_TIME
+                InvCountHeader.FIELD_COUNT_STATUS, // Kolom status
+                InvCountHeader.FIELD_WORKFLOW_ID, // Kolom Workflow ID
+                InvCountHeader.FIELD_APPROVED_TIME // Kolom waktu persetujuan
         );
 
-        return invCountHeaders;
+        return invCountHeaders; // Kembalikan daftar dokumen yang diproses
     }
 
+
     private void validateHeaderForSubmission(InvCountHeaderDTO header) {
+        // Langkah 1: Validasi apakah Count Header ID null
         if (header.getCountHeaderId() == null) {
             throw new IllegalArgumentException("Count Header ID cannot be null.");
         }
 
+        // Langkah 2: Re-query dokumen dari database untuk memastikan dokumen ada
         InvCountHeader existingHeader = invCountHeaderRepository.selectByPrimary(header.getCountHeaderId());
         if (existingHeader == null) {
             throw new IllegalArgumentException("Document with ID " + header.getCountHeaderId() + " does not exist.");
         }
 
+        // Langkah 3: Periksa apakah status dokumen valid untuk submit
         String status = existingHeader.getCountStatus();
-        if (!Arrays.asList( "PROCESSING", "WITHDRAWN").contains(status.toUpperCase())) {
+        if (!Arrays.asList("PROCESSING", "WITHDRAWN").contains(status.toUpperCase())) {
             throw new IllegalStateException("Operation is only allowed for documents in PROCESSING, or WITHDRAWN status.");
         }
 
+        // Langkah 4: Salin informasi penting dari dokumen asli ke DTO
         header.setTenantId(existingHeader.getTenantId());
         header.setCountNumber(existingHeader.getCountNumber());
     }
 
     private Map<Long, String> fetchDepartmentCodes(Set<Long> departmentIds) {
+        // Langkah 1: Jika tidak ada Department ID, kembalikan peta kosong
         if (departmentIds.isEmpty()) {
             return Collections.emptyMap();
         }
 
+        // Langkah 2: Query untuk mengambil data departemen berdasarkan ID
         List<IamDepartment> departments = iamDepartmentRepository.selectByIds(
-                departmentIds.stream().map(String::valueOf).collect(Collectors.joining(","))
+                departmentIds.stream().map(String::valueOf).collect(Collectors.joining(",")) // Gabungkan ID menjadi string
         );
 
+        // Langkah 3: Pemetaan ID departemen ke kode departemen
         return departments.stream()
                 .collect(Collectors.toMap(IamDepartment::getDepartmentId, IamDepartment::getDepartmentCode));
     }
 
     private void startWorkflowProcess(InvCountHeaderDTO header, Long tenantId, Long userId, Map<Long, String> departmentCodeMap) {
+        // Langkah 1: Ambil kode departemen berdasarkan Department ID
         String departmentCode = departmentCodeMap.get(header.getDepartmentId());
         if (departmentCode == null) {
             throw new CommonException("error.department.not.exist");
         }
 
+        // Langkah 2: Jalankan alur kerja menggunakan workflow client
         RunInstance instance = workflowClient.startInstanceByFlowKey(
-                tenantId,
-                "COUNTING_SUBMIT_FLOW",
-                header.getCountNumber(),
-                "EMPLOYEE",
-                String.valueOf(userId),
-                Collections.singletonMap("departmentCode", departmentCode)
+                tenantId, // Tenant ID
+                "COUNTING_SUBMIT_FLOW", // Nama alur kerja
+                header.getCountNumber(), // Nomor dokumen
+                "EMPLOYEE", // Tipe inisiator
+                String.valueOf(userId), // User ID sebagai inisiator
+                Collections.singletonMap("departmentCode", departmentCode) // Parameter workflow
         );
 
+        // Langkah 3: Perbarui header dengan Workflow ID dan status baru
         header.setWorkflowId(instance.getInstanceId());
         header.setCountStatus("PROCESSING");
     }
 
+
     private void confirmDocumentStatus(InvCountHeaderDTO header, Date currentTime, Long userId) {
+        // Langkah 1: Set status dokumen ke "CONFIRMED"
         header.setCountStatus("CONFIRMED");
+
+        // Langkah 2: Set waktu persetujuan dan pengguna terakhir yang memperbarui
         header.setApprovedTime(currentTime);
         header.setLastUpdatedBy(userId);
     }
+
 
     @Override
     public InvCountHeaderDTO approvalCallback(Long organizationId, WorkFlowEventDTO workFlowEventDTO) {
@@ -1298,17 +1332,22 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
     }
 
     private List<UserDTO> fetchCounterList(String counterIds) {
+        // Langkah 1: Validasi input
+        // Periksa apakah counterIds null atau kosong
         if (counterIds == null || counterIds.isEmpty()) {
-            return Collections.emptyList();
+            return Collections.emptyList(); // Jika null atau kosong, kembalikan daftar kosong
         }
 
-        return Arrays.stream(counterIds.split(","))
-                .map(counterId -> {
+        // Langkah 2: Proses string counterIds
+        // Pisahkan string berdasarkan tanda koma (",")
+        return Arrays.stream(counterIds.split(",")) // Buat stream dari array hasil split
+                .map(counterId -> { // Mapping setiap counterId menjadi UserDTO
                     UserDTO userDTO = new UserDTO();
-                    userDTO.setId(Long.valueOf(counterId));
-                    return userDTO;
+                    userDTO.setId(Long.valueOf(counterId)); // Konversi counterId ke Long dan set ke UserDTO
+                    return userDTO; // Kembalikan UserDTO
                 })
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()); // Kumpulkan hasil mapping ke dalam daftar
     }
+
 
 }

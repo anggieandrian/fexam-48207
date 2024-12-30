@@ -17,6 +17,7 @@ import java.util.Date;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.experimental.Accessors;
 
 /**
  * (InvCountExtra)实体类
@@ -30,6 +31,7 @@ import lombok.Setter;
 @ApiModel("")
 @VersionAudit
 @ModifyAudit
+@Accessors(chain = true)
 @JsonInclude(value = JsonInclude.Include.NON_NULL)
 @Table(name = "fexam_inv_count_extra")
 public class InvCountExtra extends AuditDomain {

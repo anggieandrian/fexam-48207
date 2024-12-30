@@ -118,8 +118,7 @@ public class InvCountHeaderController extends BaseController {
     @DeleteMapping("/checkAndRemove")
     public ResponseEntity<?> checkAndRemove(@PathVariable Long organizationId, @RequestBody List<InvCountHeaderDTO > invCountHeaders) {
         SecurityTokenHelper.validToken(invCountHeaders); // Validasi token keamanan pada daftar header
-        // todo ga perlua da forEach
-        invCountHeaders.forEach(header -> header.setTenantId(organizationId)); // Set tenantId untuk setiap header berdasarkan organizationId
+        // todo ga perluada forEach
         invCountHeaderService.checkAndRemove(invCountHeaders); // Panggil service untuk memproses penghapusan header
         return Results.success();// Kembalikan respons berhasil
     }
@@ -181,5 +180,6 @@ public class InvCountHeaderController extends BaseController {
     public ResponseEntity<List<InvCountHeaderDTO>> countingOrderReportDs(@PathVariable Long organizationId, @RequestBody InvCountHeaderDTO searchCriteria) {
         return Results.success(invCountHeaderService.countingOrderReportDs(searchCriteria));
     }
+
 
 }
