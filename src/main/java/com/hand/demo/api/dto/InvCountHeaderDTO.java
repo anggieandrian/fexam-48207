@@ -4,11 +4,9 @@ import com.hand.demo.domain.entity.InvCountHeader;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Getter;
 import lombok.Setter;
-
 import javax.persistence.Transient;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 
 
 @Setter
@@ -21,7 +19,6 @@ public class InvCountHeaderDTO extends InvCountHeader {
     private List<UserDTO> supervisorList;
     private Boolean isWmsWarehouse;
     private Date createdDate;
-
 
    @Transient
     private List<InvCountLineDTO> invCountLineDTOList;

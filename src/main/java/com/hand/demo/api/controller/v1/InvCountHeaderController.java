@@ -96,6 +96,7 @@ public class InvCountHeaderController extends BaseController {
         return Results.success(invCountHeaderService.orderSave(orderSaveHeaders));
     }
 
+
     /**
      * Menghapus header penghitungan berdasarkan token keamanan.
      */
@@ -107,6 +108,7 @@ public class InvCountHeaderController extends BaseController {
         invCountHeaderRepository.batchDeleteByPrimaryKey(invCountHeaders);
         return Results.success();
     }
+
 
     /**
      * Memeriksa kondisi tertentu sebelum menghapus header penghitungan.
