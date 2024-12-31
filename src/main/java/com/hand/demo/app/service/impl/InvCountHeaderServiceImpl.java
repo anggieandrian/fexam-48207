@@ -938,65 +938,71 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
 
     @Override
     public InvCountHeaderDTO countResultSync(InvCountHeaderDTO countHeaderDTO) {
-        Long tenantId = DetailsHelper.getUserDetails().getTenantId();
+        Long tenantId = DetailsHelper.getUserDetails().getTenantId(); // Mendapatkan tenantId pengguna saat ini.
 
-        // 1. Mandatory input verification
+        // 1. Verifikasi Input yang Wajib (Mandatory Input Verification)
         if (countHeaderDTO.getCountHeaderId() == null) {
-            throw new IllegalArgumentException("Count Header ID is required.");
+            throw new IllegalArgumentException("Count Header ID is required."); // ID Header harus ada.
         }
         if (countHeaderDTO.getInvCountLineDTOList() == null || countHeaderDTO.getInvCountLineDTOList().isEmpty()) {
-            throw new IllegalArgumentException("Count Order Line List is required.");
+            throw new IllegalArgumentException("Count Order Line List is required."); // Daftar baris counting harus ada.
         }
 
-        // 2. Query the database based on counting order header data
+        // 2. Query ke Database Berdasarkan Header Counting Order
         InvCountHeader existingHeader = invCountHeaderRepository.selectByPrimary(countHeaderDTO.getCountHeaderId());
         if (existingHeader == null) {
-            throw new IllegalArgumentException("Count Header not found for ID: " + countHeaderDTO.getCountHeaderId());
+            throw new IllegalArgumentException("Count Header not found for ID: " + countHeaderDTO.getCountHeaderId()); // Validasi jika header tidak ditemukan.
         }
 
-        // 3. Determine whether the warehouse is a WMS warehouse
+        // 3. Tentukan Apakah Warehouse adalah Warehouse WMS
         InvWarehouse warehouse = invWarehouseRepository.selectByPrimary(existingHeader.getWarehouseId());
         if (warehouse == null || Boolean.FALSE.equals(warehouse.getIsWmsWarehouse())) {
             throw new IllegalStateException("The current warehouse is not a WMS warehouse, operations are not allowed.");
+            // Warehouse harus WMS, jika tidak, operasi tidak diperbolehkan.
         }
 
-        // 4. Check data consistency
+        // 4. Periksa Konsistensi Data
         List<InvCountLine> existingLines = invCountLineRepository.selectList(new InvCountLine() {{
-            setCountHeaderId(countHeaderDTO.getCountHeaderId());
+            setCountHeaderId(countHeaderDTO.getCountHeaderId()); // Query semua baris terkait header ID
         }});
 
+        // Buat peta (map) dari baris yang ada untuk memudahkan validasi
         Map<Long, InvCountLine> existingLineMap = existingLines.stream()
                 .collect(Collectors.toMap(InvCountLine::getCountLineId, Function.identity()));
 
+        // Periksa apakah setiap baris input memiliki pasangan di data yang ada
         for (InvCountLineDTO inputLine : countHeaderDTO.getInvCountLineDTOList()) {
             if (!existingLineMap.containsKey(inputLine.getCountLineId())) {
                 throw new IllegalStateException("The counting order line data is inconsistent with the INV system, please check the data.");
+                // Jika baris tidak ditemukan dalam sistem INV, lempar error.
             }
         }
 
+        // Periksa konsistensi jumlah baris antara input dan data yang ada
         if (existingLines.size() != countHeaderDTO.getInvCountLineDTOList().size()) {
             throw new IllegalStateException("The number of rows is inconsistent with the INV system, please check the data.");
+            // Jika jumlah baris tidak sama, lempar error.
         }
 
-        // 5. Update the line data
+        // 5. Perbarui Data Baris (Update Line Data)
         for (InvCountLineDTO inputLine : countHeaderDTO.getInvCountLineDTOList()) {
             InvCountLine existingLine = existingLineMap.get(inputLine.getCountLineId());
 
-            // Update fields
-            existingLine.setUnitQty(inputLine.getUnitQty());
-            existingLine.setUnitDiffQty(inputLine.getUnitDiffQty());
-            existingLine.setRemark(inputLine.getRemark());
-            existingLine.setLastUpdatedBy(DetailsHelper.getUserDetails().getUserId());
-            existingLine.setLastUpdateDate(new Date());
+            // Perbarui field-field yang relevan
+            existingLine.setUnitQty(inputLine.getUnitQty()); // Kuantitas unit
+            existingLine.setUnitDiffQty(inputLine.getUnitDiffQty()); // Selisih kuantitas
+            existingLine.setRemark(inputLine.getRemark()); // Catatan atau remark
+            existingLine.setLastUpdatedBy(DetailsHelper.getUserDetails().getUserId()); // Pengguna terakhir yang mengubah
+            existingLine.setLastUpdateDate(new Date()); // Tanggal terakhir diubah
 
-            invCountLineRepository.updateByPrimaryKeySelective(existingLine);
+            invCountLineRepository.updateByPrimaryKeySelective(existingLine); // Simpan perubahan ke database
         }
 
-        // 6. Return success response
-        countHeaderDTO.setStatus("S");
-        countHeaderDTO.setErrorMsg(null);
+        // 6. Kembalikan Respons Berhasil
+        countHeaderDTO.setStatus("S"); // Set status sebagai "Success".
+        countHeaderDTO.setErrorMsg(null); // Tidak ada pesan error.
 
-        return countHeaderDTO;
+        return countHeaderDTO; // Kembalikan header DTO dengan status sukses.
     }
 
 
@@ -1023,7 +1029,7 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
             return submitValidationResult;
         }
 
-        // Langkah 4: Submit counting order
+        // Langkah 4: Submit counting order*
         // Mengubah status dokumen menjadi CONFIRMED atau memulai proses workflow.
         this.submit(submitValidationResult.getSuccessList());
 
@@ -1128,22 +1134,22 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
                 .map(InvCountHeaderDTO::getDepartmentId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        Map<Long, String> departmentCodeMap = fetchDepartmentCodes(departmentIds); // Pemetaan ID ke kode departemen
+        Map<Long, String> departmentCodeMap = fetchDepartmentCodes(departmentIds); // ** Pemetaan ID ke kode departemen
 
         Date currentTime = new Date(); // Waktu sekarang untuk pembaruan status
 
         for (InvCountHeaderDTO header : invCountHeaders) {
             // Langkah 4: Validasi dokumen
             // Memastikan dokumen valid untuk diajukan (status harus PROCESSING atau WITHDRAWN)
-            validateHeaderForSubmission(header);
+            validateHeaderForSubmission(header); //*
 
             if ("1".equals(workflowFlag)) { // Jika workflow aktif
                 // Langkah 5a: Mulai proses workflow
-                startWorkflowProcess(header, tenantId, userId, departmentCodeMap); // Jalankan alur kerja
+                startWorkflowProcess(header, tenantId, userId, departmentCodeMap); // ** Jalankan alur kerja
                 invheaders.add(header); // Tambahkan ke daftar dokumen untuk pembaruan
             } else {
                 // Langkah 5b: Perbarui status dokumen langsung
-                confirmDocumentStatus(header, currentTime, userId); // Set status ke CONFIRMED
+                confirmDocumentStatus(header, currentTime, userId); //** Set status ke CONFIRMED
             }
         }
 

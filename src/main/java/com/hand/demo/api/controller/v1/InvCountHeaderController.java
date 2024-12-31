@@ -144,6 +144,7 @@ public class InvCountHeaderController extends BaseController {
     @PostMapping("/count-result-sync")
     public ResponseEntity<InvCountHeaderDTO> countResultSync(@PathVariable Long organizationId, @RequestBody InvCountHeaderDTO invCountHeaders) {
         validObject(invCountHeaders);// Validasi input wajib
+        SecurityTokenHelper.validTokenIgnoreInsert(invCountHeaders);
         InvCountHeaderDTO resultSync = invCountHeaderService.countResultSync(invCountHeaders);// Panggil service untuk proses sinkronisasi hasil counting
         return Results.success(resultSync);// Kembalikan hasil dalam format REST standar
     }
