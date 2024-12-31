@@ -3,6 +3,8 @@ package com.hand.demo.app.service.impl;
 import com.hand.demo.api.dto.*;
 import com.hand.demo.domain.entity.*;
 import com.hand.demo.domain.repository.*;
+import com.hand.demo.infra.mapper.InvCountHeaderMapper;
+import com.hand.demo.infra.mapper.InvCountLineMapper;
 import io.choerodon.core.domain.Page;
 import io.choerodon.core.exception.CommonException;
 import io.choerodon.core.oauth.DetailsHelper;
@@ -31,6 +33,8 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static java.lang.Long.parseLong;
+
 /**
  * (InvCountHeader)应用服务
  *
@@ -51,6 +55,10 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
     private InvCountExtraRepository invCountExtraRepository;
     @Autowired
     private IamDepartmentRepository iamDepartmentRepository;
+    @Autowired
+    private InvCountLineMapper invCountLineMapper;
+    @Autowired
+    private InvCountHeaderMapper invCountHeaderMapper;
     @Autowired
     private InterfaceInvokeSdk invokeSdk;
     @Autowired
@@ -175,7 +183,7 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
             updateList.forEach(headerDTO -> {
                 InvCountHeader existingHeader = invCountHeaderRepository.selectByPrimary(headerDTO.getCountHeaderId());
                 if (existingHeader == null){
-                   throw new IllegalStateException("Header wiht ID" + headerDTO.getCountHeaderId() + "does not exist." );
+                   throw new CommonException("Header wiht ID" + headerDTO.getCountHeaderId() + "does not exist." );
                 }
                  // validasi status dan perbarui hanya field yang diizikan
                 String currentStatus = existingHeader.getCountStatus();
@@ -257,14 +265,14 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
                 // Update line lama
                 InvCountLine existingLine = invCountLineRepository.selectByPrimary(line.getCountLineId());
                 if (existingLine == null) {
-                    throw new IllegalArgumentException("Line with ID " + line.getCountLineId() + " does not exist.");
+                    throw new CommonException("Line with ID " + line.getCountLineId() + " does not exist.");
                 }
 
                 if ("INCOUNTING".equalsIgnoreCase(header.getCountStatus())) {
                     // Perbarui `unitQty` jika counter diizinkan
                     if (line.getUnitQty() != null && !line.getUnitQty().equals(existingLine.getUnitQty())) {
                         if (!isCounterAuthorized(existingLine.getCounterIds(), currentUserId)) { // pindahkan masukan ke validasi
-                            throw new IllegalArgumentException("Only authorized counters can modify unitQty.");
+                            throw new CommonException("Only authorized counters can modify unitQty.");
                         }
                         existingLine.setUnitQty(line.getUnitQty()); // Update jumlah unit
                         existingLine.setCounterIds(String.valueOf(currentUserId)); // Set counter ID
@@ -435,8 +443,8 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
         // Fetch the InvCountHeader entity from the repository using the provided ID
         InvCountHeader header = invCountHeaderRepository.selectByPrimary(countHeaderId);
         if (header == null) {
-            // ganti IllegalArgumentException = com
-            throw new IllegalArgumentException("Count Header not found for ID: " + countHeaderId);
+            // ganti CommonException = com
+            throw new CommonException("Count Header not found for ID: " + countHeaderId);
         }
 
         // Step 2: Convert entity to DTO
@@ -450,9 +458,9 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
 
         // Step 4: Fetch the list of related InvCountLineDTO objects
         // Retrieve lines associated with the header ID and map them to DTOs
-        List<InvCountLineDTO> countLineDTOList = invCountLineRepository.selectList(new InvCountLine() {{
-                    setCountHeaderId(countHeaderId); // Filter lines by countHeaderId
-                }}).stream()
+        InvCountLine paramline = new InvCountLine();
+        paramline.setCountHeaderId(countHeaderId);
+        List<InvCountLineDTO> countLineDTOList = invCountLineRepository.selectList(paramline).stream()
                 .map(line -> {
                     // Convert each InvCountLine entity to InvCountLineDTO
                     InvCountLineDTO lineDTO = new InvCountLineDTO();
@@ -546,7 +554,7 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
                         dto.setCode(parts[1].trim()); // Set Code
                         return dto;
                     }
-                    throw new IllegalArgumentException("Invalid snapshot material format: " + entry);
+                    throw new CommonException("Invalid snapshot material format: " + entry);
                 })
                 .collect(Collectors.toList());
     }
@@ -712,7 +720,7 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
             return null; // Jika batch ID tidak ada atau kosong, kembalikan `null`.
         }
         // Mengambil Batch ID pertama dari string yang dipisahkan dengan koma
-        return Long.parseLong(snapshotBatchIds.split(",")[0]);
+        return parseLong(snapshotBatchIds.split(",")[0]);
         // - `split(",")` membagi string berdasarkan koma.
         // - `parseLong` mengonversi string ID pertama menjadi Long.
         // - Contoh: "123,456" akan mengembalikan `123` sebagai Long.
@@ -725,9 +733,9 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
         } // Membagi material ID pertama berdasarkan koma, lalu garis bawah
         String[] parts = snapshotMaterialIds.split(",")[0].split("_");
         if (parts.length == 2) { // Jika formatnya valid (dua bagian: ID dan kode), ambil ID sebagai Long
-            return Long.parseLong(parts[0]);
+            return parseLong(parts[0]);
         } // Jika format tidak valid, lemparkan pengecualian
-        throw new IllegalArgumentException("Invalid material ID format: " + snapshotMaterialIds);
+        throw new CommonException("Invalid material ID format: " + snapshotMaterialIds);
         // - Contoh valid: "123_item1" -> ID = 123.
         // - Jika format tidak memiliki dua bagian, pengecualian akan dilempar.
     }
@@ -809,8 +817,8 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
             try {
                 // a. Validasi warehouseId pada header
                 if (header.getWarehouseId() == null) {
-                    // todo IllegalArgumentException ubah ini
-                    throw new IllegalArgumentException("Warehouse ID is missing for Count Header ID: " + header.getCountHeaderId());
+                    // todo CommonException ubah ini
+                    throw new CommonException("Warehouse ID is missing for Count Header ID: " + header.getCountHeaderId());
                 }
 
                 // Query warehouse data
@@ -819,8 +827,8 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
                     setTenantId(tenantId);
                 }});
                 if (warehouse == null) {
-                    // todo IllegalArgumentException ubah ini
-                    throw new IllegalArgumentException("Warehouse not found for ID: " + header.getWarehouseId());
+                    // todo CommonException ubah ini
+                    throw new CommonException("Warehouse not found for ID: " + header.getWarehouseId());
                 }
 
                 // b. Validasi atau inisialisasi data tambahan **
@@ -863,9 +871,9 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
                         syncMsgExtra.setProgramValue(response
                                 .getMessage());
                         //todo
-                        throw new IllegalStateException("WMS synchronization failed: " + response.getMessage());
+                        throw new CommonException("WMS synchronization failed: " + response.getMessage());
                     } else {
-                        throw new IllegalStateException("WMS synchronization returned null response.");
+                        throw new CommonException("WMS synchronization returned null response.");
                     }
                 } else {
                     // Tandai dengan status SKIP jika bukan tipe WMS
@@ -938,72 +946,81 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
 
     @Override
     public InvCountHeaderDTO countResultSync(InvCountHeaderDTO countHeaderDTO) {
-        Long tenantId = DetailsHelper.getUserDetails().getTenantId(); // Mendapatkan tenantId pengguna saat ini.
-
-        // 1. Verifikasi Input yang Wajib (Mandatory Input Verification)
+        // 1. Verifikasi Input yang Wajib
         if (countHeaderDTO.getCountHeaderId() == null) {
-            throw new IllegalArgumentException("Count Header ID is required."); // ID Header harus ada.
+            countHeaderDTO.setErrorMsg("Count Header ID is required.");
+            countHeaderDTO.setStatus("E"); // Set status menjadi Error
+            return countHeaderDTO;
         }
         if (countHeaderDTO.getInvCountLineDTOList() == null || countHeaderDTO.getInvCountLineDTOList().isEmpty()) {
-            throw new IllegalArgumentException("Count Order Line List is required."); // Daftar baris counting harus ada.
+            countHeaderDTO.setErrorMsg("Count Order Line List is required.");
+            countHeaderDTO.setStatus("E"); // Set status menjadi Error
+            return countHeaderDTO;
         }
 
-        // 2. Query ke Database Berdasarkan Header Counting Order
+        // 2. Query Data Header Counting Order
         InvCountHeader existingHeader = invCountHeaderRepository.selectByPrimary(countHeaderDTO.getCountHeaderId());
         if (existingHeader == null) {
-            throw new IllegalArgumentException("Count Header not found for ID: " + countHeaderDTO.getCountHeaderId()); // Validasi jika header tidak ditemukan.
+            countHeaderDTO.setErrorMsg("Count Header not found for ID: " + countHeaderDTO.getCountHeaderId());
+            countHeaderDTO.setStatus("E");
+            return countHeaderDTO;
         }
 
-        // 3. Tentukan Apakah Warehouse adalah Warehouse WMS
+        // 3. Validasi Warehouse WMS
         InvWarehouse warehouse = invWarehouseRepository.selectByPrimary(existingHeader.getWarehouseId());
-        if (warehouse == null || Boolean.FALSE.equals(warehouse.getIsWmsWarehouse())) {
-            throw new IllegalStateException("The current warehouse is not a WMS warehouse, operations are not allowed.");
-            // Warehouse harus WMS, jika tidak, operasi tidak diperbolehkan.
+        if (warehouse == null || (warehouse.getIsWmsWarehouse() != 0)) { // todo perbaiki logic ini
+            countHeaderDTO.setErrorMsg("The current warehouse is not a WMS warehouse, operations are not allowed.");
+            countHeaderDTO.setStatus("E");
+            return countHeaderDTO;
         }
 
         // 4. Periksa Konsistensi Data
         List<InvCountLine> existingLines = invCountLineRepository.selectList(new InvCountLine() {{
-            setCountHeaderId(countHeaderDTO.getCountHeaderId()); // Query semua baris terkait header ID
+            setCountHeaderId(countHeaderDTO.getCountHeaderId());
         }});
 
-        // Buat peta (map) dari baris yang ada untuk memudahkan validasi
+        // Map untuk validasi ID baris
         Map<Long, InvCountLine> existingLineMap = existingLines.stream()
                 .collect(Collectors.toMap(InvCountLine::getCountLineId, Function.identity()));
 
-        // Periksa apakah setiap baris input memiliki pasangan di data yang ada
+        // Periksa kecocokan data input dengan data database
         for (InvCountLineDTO inputLine : countHeaderDTO.getInvCountLineDTOList()) {
             if (!existingLineMap.containsKey(inputLine.getCountLineId())) {
-                throw new IllegalStateException("The counting order line data is inconsistent with the INV system, please check the data.");
-                // Jika baris tidak ditemukan dalam sistem INV, lempar error.
+                countHeaderDTO.setErrorMsg("The counting order line data is inconsistent with the INV system, please check the data.");
+                countHeaderDTO.setStatus("E");
+                return countHeaderDTO;
             }
         }
 
-        // Periksa konsistensi jumlah baris antara input dan data yang ada
+        // Validasi jumlah baris antara input dan database
         if (existingLines.size() != countHeaderDTO.getInvCountLineDTOList().size()) {
-            throw new IllegalStateException("The number of rows is inconsistent with the INV system, please check the data.");
-            // Jika jumlah baris tidak sama, lempar error.
+            countHeaderDTO.setErrorMsg("The number of rows is inconsistent with the INV system, please check the data.");
+            countHeaderDTO.setStatus("E");
+            return countHeaderDTO;
         }
 
-        // 5. Perbarui Data Baris (Update Line Data)
+        // 5. Perbarui Data Baris
         for (InvCountLineDTO inputLine : countHeaderDTO.getInvCountLineDTOList()) {
             InvCountLine existingLine = existingLineMap.get(inputLine.getCountLineId());
 
-            // Perbarui field-field yang relevan
+            // Perbarui field yang relevan
             existingLine.setUnitQty(inputLine.getUnitQty()); // Kuantitas unit
             existingLine.setUnitDiffQty(inputLine.getUnitDiffQty()); // Selisih kuantitas
-            existingLine.setRemark(inputLine.getRemark()); // Catatan atau remark
-            existingLine.setLastUpdatedBy(DetailsHelper.getUserDetails().getUserId()); // Pengguna terakhir yang mengubah
-            existingLine.setLastUpdateDate(new Date()); // Tanggal terakhir diubah
+            existingLine.setRemark(inputLine.getRemark()); // Catatan
+            // todo ga perrlu done
 
-            invCountLineRepository.updateByPrimaryKeySelective(existingLine); // Simpan perubahan ke database
+            // Update ke database
+            // TODO tambahkan optional
+
+            invCountLineRepository.updateByPrimaryKeySelective(existingLine);
         }
 
         // 6. Kembalikan Respons Berhasil
-        countHeaderDTO.setStatus("S"); // Set status sebagai "Success".
-        countHeaderDTO.setErrorMsg(null); // Tidak ada pesan error.
-
-        return countHeaderDTO; // Kembalikan header DTO dengan status sukses.
+        countHeaderDTO.setStatus("S"); // Set status menjadi Success
+        countHeaderDTO.setErrorMsg(null); // Bersihkan pesan error
+        return countHeaderDTO; // Kembalikan header DTO
     }
+
 
 
     @Override
@@ -1045,66 +1062,87 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
 
     @Override
     public InvCountInfoDTO submitCheck(List<InvCountHeaderDTO> invCountHeaders) {
+        // Objek hasil validasi
         InvCountInfoDTO result = new InvCountInfoDTO();
+
+        // Daftar untuk dokumen yang lolos validasi dan yang gagal
         List<InvCountHeaderDTO> successList = new ArrayList<>();
         List<InvCountHeaderDTO> errorList = new ArrayList<>();
+
+        // Mendapatkan ID pengguna yang sedang login
         Long currentUserId = DetailsHelper.getUserDetails().getUserId();
 
+        // Iterasi untuk setiap dokumen
         for (InvCountHeaderDTO header : invCountHeaders) {
             StringBuilder errorMessages = new StringBuilder();
 
             // 1. Validasi ulang dari database
-            // Pastikan dokumen masih ada dalam database.
+            // Memastikan dokumen masih ada di database
             InvCountHeader existingHeader = invCountHeaderRepository.selectByPrimary(header.getCountHeaderId());
             if (existingHeader == null) {
-                errorMessages.append("Document with ID ").append(header.getCountHeaderId()).append(" does not exist. ");
+                errorMessages.append("Dokumen dengan ID ").append(header.getCountHeaderId()).append(" tidak ditemukan. ");
+                header.setErrorMsg(errorMessages.toString());
+                errorList.add(header); // Tambahkan dokumen ke daftar error
+                continue; // Lanjutkan ke dokumen berikutnya
             }
 
             // 2. Validasi status dokumen
-            // Hanya dokumen dengan status PROCESSING atau WITHDRAWN yang dapat diajukan.
+            // Operasi hanya diperbolehkan untuk dokumen dengan status tertentu
             String status = existingHeader.getCountStatus();
-            if (!"PROCESSING".equalsIgnoreCase(status) && !"WITHDRAWN".equalsIgnoreCase(status)) {
-                errorMessages.append("Operation is only allowed for documents in PROCESSING, or WITHDRAWN status. ");
+            if (!"INCOUNTING".equalsIgnoreCase(status) &&
+                    !"PROCESSING".equalsIgnoreCase(status) &&
+                    !"REJECTED".equalsIgnoreCase(status) &&
+                    !"WITHDRAWN".equalsIgnoreCase(status)) {
+                errorMessages.append("Operasi hanya diizinkan untuk dokumen dengan status COUNTING, PROCESSING, REJECTED, atau WITHDRAWN. ");
             }
 
             // 3. Validasi supervisor
-            // Pastikan hanya supervisor yang dapat mengajukan dokumen.
-            if (!currentUserId.equals(existingHeader.getSupervisorIds())) {
-                errorMessages.append("Only the supervisor can submit the document. ");
+            // Memastikan hanya supervisor yang dapat mengajukan dokumen
+            String supervisorIds = existingHeader.getSupervisorIds();
+            // todo bnya ubah agar bisa lebih di pahami
+            boolean b = Arrays.stream(supervisorIds.split(","))
+                    .map(Long::parseLong)
+                    .anyMatch(id -> id.equals(currentUserId));
+            if (!b) {
+                errorMessages.append("Hanya supervisor yang dapat mengajukan dokumen ini. ");
             }
 
             // 4. Validasi integritas data
-            // Pastikan tidak ada kuantitas kosong dan alasan untuk perbedaan harus diisi.
+            // Pastikan tidak ada kuantitas kosong dan alasan untuk perbedaan harus diisi
             List<InvCountLine> lines = invCountLineRepository.selectList(new InvCountLine() {{
                 setCountHeaderId(existingHeader.getCountHeaderId());
             }});
 
+            // Periksa apakah ada baris dengan unitQty kosong
+            // TODO tambahkan getUnitDiffQty
             boolean hasEmptyUnitQty = lines.stream().anyMatch(line -> line.getUnitQty() == null);
             if (hasEmptyUnitQty) {
-                errorMessages.append("There are data rows with empty count quantity. Please check the data. ");
+                errorMessages.append("Ada baris data dengan jumlah kuantitas kosong. Silakan periksa kembali data. ");
             }
 
-            boolean hasDiffWithoutReason = lines.stream().anyMatch(line -> line.getUnitDiffQty() != null && line.getReason() == null);
+            // Periksa apakah ada perbedaan tanpa alasan
+            boolean hasDiffWithoutReason = lines.stream()
+                    .anyMatch(line -> line.getUnitDiffQty() != null && header.getReason() == null);
             if (hasDiffWithoutReason) {
-                errorMessages.append("For rows with differences in counting, the reason field must be entered. ");
+                errorMessages.append("Untuk baris dengan perbedaan kuantitas, kolom alasan harus diisi. ");
             }
 
-            // Jika ada error, tambahkan ke daftar error; jika tidak, tambahkan ke daftar sukses.
+            // Tentukan apakah dokumen masuk ke daftar sukses atau error
             if (errorMessages.length() > 0) {
                 header.setErrorMsg(errorMessages.toString());
-                errorList.add(header);
+                errorList.add(header); // Tambahkan ke daftar error
             } else {
-                successList.add(header);
+                successList.add(header); // Tambahkan ke daftar sukses
             }
         }
 
-        // Tetapkan hasil validasi.
-        result.setErrorList(errorList);
-        result.setSuccessList(successList);
-        result.setTotalErrorMsg("Total errors: " + errorList.size());
-        return result;
-    }
+        // Set hasil validasi ke objek result
+        result.setErrorList(errorList); // Daftar dokumen yang gagal validasi
+        result.setSuccessList(successList); // Daftar dokumen yang lolos validasi
+        result.setTotalErrorMsg("Total error: " + errorList.size()); // Total pesan error
 
+        return result; // Kembalikan hasil validasi
+    }
 
     @Override
     @Transactional(rollbackFor = Exception.class) // Transaksi dengan rollback jika terjadi exception
@@ -1112,7 +1150,7 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
         // Langkah 1: Validasi input
         // Periksa apakah daftar dokumen counting order kosong atau null
         if (invCountHeaders == null || invCountHeaders.isEmpty()) {
-            throw new IllegalArgumentException("The list of count headers cannot be null or empty.");
+            throw new CommonException("The list of count headers cannot be null or empty.");
         }
 
         List<InvCountHeader> invheaders = new ArrayList<>(); // Daftar untuk header yang akan diperbarui
@@ -1141,6 +1179,7 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
         for (InvCountHeaderDTO header : invCountHeaders) {
             // Langkah 4: Validasi dokumen
             // Memastikan dokumen valid untuk diajukan (status harus PROCESSING atau WITHDRAWN)
+            // todo nanti di ubah
             validateHeaderForSubmission(header); //*
 
             if ("1".equals(workflowFlag)) { // Jika workflow aktif
@@ -1168,19 +1207,19 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
     private void validateHeaderForSubmission(InvCountHeaderDTO header) {
         // Langkah 1: Validasi apakah Count Header ID null
         if (header.getCountHeaderId() == null) {
-            throw new IllegalArgumentException("Count Header ID cannot be null.");
+            throw new CommonException("Count Header ID cannot be null.");
         }
 
         // Langkah 2: Re-query dokumen dari database untuk memastikan dokumen ada
         InvCountHeader existingHeader = invCountHeaderRepository.selectByPrimary(header.getCountHeaderId());
         if (existingHeader == null) {
-            throw new IllegalArgumentException("Document with ID " + header.getCountHeaderId() + " does not exist.");
+            throw new CommonException("Document with ID " + header.getCountHeaderId() + " does not exist.");
         }
 
         // Langkah 3: Periksa apakah status dokumen valid untuk submit
         String status = existingHeader.getCountStatus();
-        if (!Arrays.asList("PROCESSING", "WITHDRAWN").contains(status.toUpperCase())) {
-            throw new IllegalStateException("Operation is only allowed for documents in PROCESSING, or WITHDRAWN status.");
+        if (!Arrays.asList("INCOUNTING","PROCESSING", "WITHDRAWN").contains(status.toUpperCase())) {
+            throw new CommonException("Operation is only allowed for documents in INCOUNTING, PROCESSING, or WITHDRAWN status.");
         }
 
         // Langkah 4: Salin informasi penting dari dokumen asli ke DTO
@@ -1241,7 +1280,7 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
     public InvCountHeaderDTO approvalCallback(Long organizationId, WorkFlowEventDTO workFlowEventDTO) {
         // Validasi input
         if (workFlowEventDTO == null || workFlowEventDTO.getBusinessKey() == null) {
-            throw new IllegalArgumentException("WorkFlowEventDTO or BusinessKey cannot be null.");
+            throw new CommonException("WorkFlowEventDTO or BusinessKey cannot be null.");
         }
 
         // Mengambil data dokumen berdasarkan Business Key
@@ -1265,16 +1304,17 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
                 break;
 
             case "APPROVED":
-
-
-            case "WITHDRAWN":
                 // Tidak ada tambahan logika untuk WITHDRAWN
                 invCountHeader.setApprovedTime(workFlowEventDTO.getApprovedTime() != null ?
                         workFlowEventDTO.getApprovedTime() : new Date());
+
+
+            case "WITHDRAWN":
                 break;
+            // todo tambahkan
 
             default:
-                throw new IllegalStateException(String.format("Invalid document status [%s]", workFlowEventDTO.getDocStatus()));
+                throw new CommonException(String.format("Invalid document status [%s]", workFlowEventDTO.getDocStatus()));
         }
 
         // Update data di repository
@@ -1294,66 +1334,90 @@ public class InvCountHeaderServiceImpl implements InvCountHeaderService {
 
     @Override
     public List<InvCountHeaderDTO> countingOrderReportDs(InvCountHeaderDTO searchCriteria) {
-        // Validasi parameter input
+        // **1. Validasi Input**
         if (searchCriteria == null) {
-            throw new IllegalArgumentException("Search criteria cannot be null.");
+            throw new CommonException("Search criteria cannot be null."); // Validasi input wajib
         }
 
-        // Inisialisasi filter untuk query
-        Map<String, Object> filters = new HashMap<>();
+        // **2. Inisialisasi Query Filter**
+        // Membuat query dinamis dengan parameter dari searchCriteria
+        Map<String, Object> queryFilters = new HashMap<>();
         if (searchCriteria.getCountNumber() != null) {
-            filters.put("countNumber", searchCriteria.getCountNumber());
+            queryFilters.put("countNumber", searchCriteria.getCountNumber());
         }
         if (searchCriteria.getCountStatus() != null) {
-            filters.put("countStatus", searchCriteria.getCountStatus());
+            queryFilters.put("countStatus", searchCriteria.getCountStatus());
         }
         if (searchCriteria.getDepartmentId() != null) {
-            filters.put("departmentId", searchCriteria.getDepartmentId());
+            queryFilters.put("departmentId", searchCriteria.getDepartmentId());
         }
         if (searchCriteria.getWarehouseId() != null) {
-            filters.put("warehouseId", searchCriteria.getWarehouseId());
+            queryFilters.put("warehouseId", searchCriteria.getWarehouseId());
         }
         if (searchCriteria.getCreatedDate() != null) {
-            filters.put("createdDate", searchCriteria.getCreatedDate());
+            queryFilters.put("createdDate", searchCriteria.getCreatedDate());
         }
 
-        // Query database untuk mendapatkan data counting order
-        List<InvCountHeader> countHeaders = invCountHeaderRepository.selectByCriteria((InvCountHeaderDTO) filters);
+        // **3. Query Data Counting Order**
+        // Query menggunakan MyBatis mapper langsung
+        List<InvCountHeader> countHeaders = invCountHeaderMapper.selectByCondition(queryFilters);
 
-        // Konversi hasil query ke DTO
+        // **4. Konversi Entity ke DTO**
+        // Mengubah hasil query menjadi bentuk DTO
         List<InvCountHeaderDTO> countHeaderDTOs = countHeaders.stream()
                 .map(header -> {
                     InvCountHeaderDTO dto = new InvCountHeaderDTO();
-                    BeanUtils.copyProperties(header, dto);
+                    BeanUtils.copyProperties(header, dto); // Salin properti dari entity ke DTO
 
-                    // Fetch dan set tambahan informasi terkait Counter dan Supervisor
+                    // Tambahkan Counter List
                     dto.setCounterList(fetchCounterList(header.getCounterIds()));
-//                    dto.setSupervisorList(header.getSupervisorIds()); // SupervisorList disimpan langsung sebagai String
+
+                    // Tambahkan Supervisor List
+                    dto.setSupervisorList(fetchSupervisorList(header.getSupervisorIds()));
+
+
 
                     return dto;
                 })
                 .collect(Collectors.toList());
 
-        return countHeaderDTOs;
+        return countHeaderDTOs; // Kembalikan daftar DTO
     }
 
     private List<UserDTO> fetchCounterList(String counterIds) {
-        // Langkah 1: Validasi input
-        // Periksa apakah counterIds null atau kosong
+        // **Validasi Input Counter List**
         if (counterIds == null || counterIds.isEmpty()) {
             return Collections.emptyList(); // Jika null atau kosong, kembalikan daftar kosong
         }
 
-        // Langkah 2: Proses string counterIds
-        // Pisahkan string berdasarkan tanda koma (",")
-        return Arrays.stream(counterIds.split(",")) // Buat stream dari array hasil split
-                .map(counterId -> { // Mapping setiap counterId menjadi UserDTO
+        // Pisahkan counterIds dan buat daftar UserDTO
+        return Arrays.stream(counterIds.split(","))
+                .map(counterId -> {
                     UserDTO userDTO = new UserDTO();
-                    userDTO.setId(Long.valueOf(counterId)); // Konversi counterId ke Long dan set ke UserDTO
-                    return userDTO; // Kembalikan UserDTO
+                    userDTO.setId(Long.valueOf(counterId.trim())); // Konversi ID menjadi Long
+                    userDTO.setRealName("Counter-" + counterId.trim()); // Contoh nama
+                    return userDTO;
                 })
-                .collect(Collectors.toList()); // Kumpulkan hasil mapping ke dalam daftar
+                .collect(Collectors.toList());
     }
 
+    private List<UserDTO> fetchSupervisorList(String supervisorIds) {
+        // **Validasi Input Supervisor List**
+        if (supervisorIds == null || supervisorIds.isEmpty()) {
+            return Collections.emptyList(); // Jika null atau kosong, kembalikan daftar kosong
+        }
 
+        // Pisahkan supervisorIds dan buat daftar UserDTO
+        return Arrays.stream(supervisorIds.split(","))
+                .map(supervisorId -> {
+                    UserDTO userDTO = new UserDTO();
+                    userDTO.setId(Long.valueOf(supervisorId.trim())); // Konversi ID menjadi Long
+                    userDTO.setRealName("Supervisor-" + supervisorId.trim()); // Contoh nama
+                    return userDTO;
+                })
+                .collect(Collectors.toList());
+    }
 }
+
+
+

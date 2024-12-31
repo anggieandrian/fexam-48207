@@ -23,7 +23,7 @@ import com.hand.demo.domain.entity.InvCountHeader;
 import com.hand.demo.domain.repository.InvCountHeaderRepository;
 import springfox.documentation.annotations.ApiIgnore;
 
-import javax.validation.Valid;
+
 import java.util.List;
 
 /**
@@ -157,7 +157,7 @@ public class InvCountHeaderController extends BaseController {
     @PostMapping("/order-submit")
     public ResponseEntity<InvCountInfoDTO> orderSubmit(@PathVariable Long organizationId, @RequestBody List<InvCountHeaderDTO> invCountHeaders) {
         validObject(invCountHeaders); // Validasi input wajib
-        SecurityTokenHelper.validTokenIgnoreInsert(invCountHeaders);
+//        SecurityTokenHelper.validTokenIgnoreInsert(invCountHeaders);
         InvCountInfoDTO orderSubmit = invCountHeaderService.orderSubmit(invCountHeaders); // Panggil metode executeCheck dari service
         return Results.success(orderSubmit); // Kembalikan hasil validasi
     }
@@ -175,10 +175,17 @@ public class InvCountHeaderController extends BaseController {
     /**
      * Mengambil laporan dataset perintah penghitungan berdasarkan kriteria pencarian.
      */
+//    @ApiOperation("Counting order report dataset method")
+//    @GetMapping("/counting-order-report")
+//    @Permission(level = ResourceLevel.ORGANIZATION)
+//    public ResponseEntity<List<InvCountHeaderDTO>> countingOrderReportDs(@PathVariable Long organizationId, @RequestBody InvCountHeaderDTO searchCriteria) {
+//        return Results.success(invCountHeaderService.countingOrderReportDs(searchCriteria));
+//    }
+
     @ApiOperation("Counting order report dataset method")
     @GetMapping("/counting-order-report")
     @Permission(level = ResourceLevel.ORGANIZATION)
-    public ResponseEntity<List<InvCountHeaderDTO>> countingOrderReportDs(@PathVariable Long organizationId, @RequestBody InvCountHeaderDTO searchCriteria) {
+    public ResponseEntity<List<InvCountHeaderDTO>> countingOrderReportDs(@PathVariable Long organizationId, InvCountHeaderDTO searchCriteria) {
         return Results.success(invCountHeaderService.countingOrderReportDs(searchCriteria));
     }
 

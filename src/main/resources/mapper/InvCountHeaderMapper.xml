@@ -183,10 +183,6 @@
             </if>
         </where>
     </select>
-    <!--untuk remove delete-->
-    <!--    <select id="getHeadersByIds" resultType="com.hand.demo.domain.entity.InvCountHeader">
 
-        </select>
-        <select id="selectHeaderById" resultType="com.hand.demo.domain.entity.InvCountHeader"></select>-->
 </mapper>
 

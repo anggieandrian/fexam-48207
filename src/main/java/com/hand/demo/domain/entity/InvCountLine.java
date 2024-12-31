@@ -139,4 +139,5 @@ public class InvCountLine extends AuditDomain {
 
     private String reason;
 
+
 }

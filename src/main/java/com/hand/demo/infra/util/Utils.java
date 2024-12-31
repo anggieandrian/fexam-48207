@@ -9,11 +9,11 @@ public class Utils {
 
 //    public static void generateCountNumber(InvCountHeader invCountHeader, String codeRule, Map<String, String> variable, CodeRuleBuilder codeRuleBuilder) {
 //        if (codeRule == null || codeRule.isEmpty()) {
-//            throw new IllegalArgumentException("Code rule cannot be null or empty.");
+//            throw new CommonException("Code rule cannot be null or empty.");
 //        }
 //
 //        if (variable == null || variable.isEmpty()) {
-//            throw new IllegalArgumentException("Variable map cannot be null or empty.");
+//            throw new CommonException("Variable map cannot be null or empty.");
 //        }
 //
 //        // Generate the document number

@@ -1,6 +1,7 @@
 package com.hand.demo.infra.repository.impl;
 
 import com.hand.demo.api.dto.InvCountHeaderDTO;
+import io.choerodon.core.exception.CommonException;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.ibatis.session.SqlSession;
 import org.hzero.mybatis.base.impl.BaseRepositoryImpl;
@@ -35,7 +36,7 @@ public class InvCountHeaderRepositoryImpl extends BaseRepositoryImpl<InvCountHea
     @Override
     public List<InvCountHeader> selectList(InvCountHeader invCountHeader) {
         if (invCountHeader == null) {
-            throw new IllegalArgumentException("Search criteria cannot be null.");
+            throw new CommonException("Search criteria cannot be null.");
         }
 
         // Gunakan MyBatis Mapper untuk query dinamis
@@ -57,7 +58,7 @@ public class InvCountHeaderRepositoryImpl extends BaseRepositoryImpl<InvCountHea
     @Override
     public Optional<InvCountHeader> findById(Long id) {
         if (id == null) {
-            throw new IllegalArgumentException("ID tidak boleh null.");
+            throw new CommonException("ID tidak boleh null.");
         }
 
         // Ambil data dari database berdasarkan ID
@@ -72,13 +73,13 @@ public class InvCountHeaderRepositoryImpl extends BaseRepositoryImpl<InvCountHea
     @Override
     public void deleteById(Long id) {
         if (id == null) {
-            throw new IllegalArgumentException("ID tidak boleh null.");
+            throw new CommonException("ID tidak boleh null.");
         }
 
         // Periksa apakah data ada sebelum menghapus
         Optional<InvCountHeader> header = invCountHeaderRepository.findById(id);
         if (!header.isPresent()) {
-            throw new IllegalArgumentException("Header dengan ID " + id + " tidak ditemukan.");
+            throw new CommonException("Header dengan ID " + id + " tidak ditemukan.");
         }
 
         // Hapus data dari database
@@ -103,7 +104,7 @@ public class InvCountHeaderRepositoryImpl extends BaseRepositoryImpl<InvCountHea
     public List<InvCountHeader> selectByMap(Map<String, Object> queryFilters) {
         // Ensure queryFilters is not null or empty
         if (queryFilters == null || queryFilters.isEmpty()) {
-            throw new IllegalArgumentException("Query filters cannot be null or empty.");
+            throw new CommonException("Query filters cannot be null or empty.");
         }
 
         // Build SQL query dynamically
@@ -132,7 +133,7 @@ public class InvCountHeaderRepositoryImpl extends BaseRepositoryImpl<InvCountHea
     public List<InvCountHeader> selectByCriteria(InvCountHeaderDTO filterDTO) {
         // Validate input DTO
         if (filterDTO == null) {
-            throw new IllegalArgumentException("Filter DTO cannot be null.");
+            throw new CommonException("Filter DTO cannot be null.");
         }
 
         // Use the HZero repository to dynamically build query filters
@@ -170,8 +171,8 @@ public class InvCountHeaderRepositoryImpl extends BaseRepositoryImpl<InvCountHea
     public void deleteByIds(List<Long> removableIds) {
         // 1. Validasi input
         if (removableIds == null || removableIds.isEmpty()) {
-            throw new IllegalArgumentException("The list of IDs to delete cannot be null or empty.");
-            // Jika daftar ID null atau kosong, lemparkan IllegalArgumentException.
+            throw new CommonException("The list of IDs to delete cannot be null or empty.");
+            // Jika daftar ID null atau kosong, lemparkan CommonException.
         }
 
         // 2. Menggabungkan ID untuk digunakan dalam SQL query

@@ -4,6 +4,7 @@ import io.choerodon.mybatis.common.BaseMapper;
 import com.hand.demo.domain.entity.InvCountHeader;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * (InvCountHeader)应用服务
@@ -19,5 +20,6 @@ public interface InvCountHeaderMapper extends BaseMapper<InvCountHeader> {
      * @return 返回值
      */
     List<InvCountHeader> selectList(InvCountHeader invCountHeader);
+
 }
 

@@ -23,6 +23,7 @@ public class InvCountLineRepositoryImpl extends BaseRepositoryImpl<InvCountLine>
 
     @Override
     public List<InvCountLine> selectList(InvCountLine invCountLine) {
+        // Memanggil mapper untuk mengambil daftar line berdasarkan kriteria yang diberikan
         return invCountLineMapper.selectList(invCountLine);
     }
 

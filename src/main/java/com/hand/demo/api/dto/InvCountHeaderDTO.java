@@ -26,9 +26,13 @@ public class InvCountHeaderDTO extends InvCountHeader {
     private List<SnapshotMaterialDTO> snapshotMaterialList; // Update type
     private List<SnapshotBatchDTO> snapshotBatchList;
 
+
     private String countStatusMeaning;
     private String countDimensionMeaning;
     private String countTypeMeaning;
     private String countModeMeaning;
     private String supervisor;
+
+
+
 }
